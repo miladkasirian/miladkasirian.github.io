@@ -1,0 +1,22 @@
+
+:root{--accent:#003366;--link:#0b5fff}
+*{box-sizing:border-box}
+body{font-family: Georgia, 'Times New Roman', serif;color:#222;margin:0;line-height:1.6}
+header{background:var(--accent);color:#fff;padding:20px 16px}
+.header-inner{max-width:980px;margin:0 auto;display:flex;align-items:center;gap:16px}
+header img{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #fff}
+.site-title{margin:0;font-size:28px}
+.site-sub{margin:2px 0 0 0;font-size:16px;opacity:.95}
+nav{background:#f6f6f6;border-top:1px solid #eee;border-bottom:1px solid #eee}
+nav .nav-inner{max-width:980px;margin:0 auto;display:flex;gap:16px;flex-wrap:wrap;padding:8px 16px}
+nav a{color:var(--accent);text-decoration:none;padding:6px 10px;border-radius:8px}
+nav a:hover{background:#e9eef9}
+main{max-width:980px;margin:24px auto;padding:0 16px 60px}
+h1{color:var(--accent)}
+h2{color:#333;margin-top:28px}
+a{color:var(--link)}
+.footer{border-top:1px solid #eee;padding:16px;background:#fafafa;color:#555}
+.footer .inner{max-width:980px;margin:0 auto;font-size:14px}
+.card{border:1px solid #eee;border-radius:12px;padding:16px;margin:12px 0;background:#fff}
+ul.clean{padding-left:20px}
+kbd{background:#eee;border-radius:4px;padding:2px 6px;border:1px solid #ddd}
