@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guide: How to Merge and Reduce PDF File Size</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+        
+        h3 {
+            color: #2980b9;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        .intro {
+            background-color: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        
+        a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+        
+        .code-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        
+        .code-header {
+            background-color: #34495e;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px 5px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .copy-btn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 6px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .copy-btn:hover {
+            background-color: #2980b9;
+        }
+        
+        .copy-btn.copied {
+            background-color: #27ae60;
+        }
+        
+        .code-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            width: 100%;
+            min-height: 60px;
+            resize: vertical;
+            color: #333;
+        }
+        
+        .code-box:focus {
+            outline: 2px solid #3498db;
+            background-color: #fff;
+        }
+        
+        ul, ol {
+            margin-left: 30px;
+            margin-bottom: 15px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        .note {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .note strong {
+            color: #856404;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: white;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .highlight {
+            background-color: #d4edda;
+            font-weight: bold;
+        }
+        
+        .benefits {
+            background-color: #e8f4f8;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .benefits ul {
+            margin-bottom: 0;
+        }
+        
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 2px solid #dee2e6;
+            color: #6c757d;
+        }
+        
+        .footer a {
+            color: #3498db;
+        }
+        
+        code {
+            background-color: #f1f3f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .platform-diff {
+            margin: 20px 0;
+        }
+
+        .edit-hint {
+            font-size: 0.85em;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Guide: How to Merge and Reduce PDF File Size</h1>
+        <div class="subtitle">FIN 322 - Financial Institutions & Markets</div>
+        
+        <div class="intro">
+            <p>You may face challenges when trying to combine (merge) multiple PDF files into a single file, or when your PDF files have excessively large file sizes.</p>
+            <p style="margin-top: 10px;">There are many solutions available, but I will provide you with <strong>two free options</strong>. You can search for other methods if needed.</p>
+        </div>
+        
+        <h2>Approach 1: Online Tools (Quick & Easy)</h2>
+        
+        <h3>For Merging PDFs</h3>
+        <p>Use this online website for merging PDFs:</p>
+        <p><a href="https://www.ilovepdf.com/merge_pdf" target="_blank">https://www.ilovepdf.com/merge_pdf</a></p>
+        
+        <h3>For Reducing PDF Size</h3>
+        <p>Use this online website for compressing PDFs:</p>
+        <p><a href="https://www.ilovepdf.com/compress_pdf" target="_blank">https://www.ilovepdf.com/compress_pdf</a></p>
+        
+        <div class="note">
+            <strong>Note:</strong> I don't strongly recommend the compression tool because it reduces the quality significantly, but it is still a good option if you need very small file sizes.
+        </div>
+        
+        <h2>Approach 2: Offline Solution Using Ghostscript (Recommended)</h2>
+        
+        <p>This approach uses <strong>Ghostscript</strong>, a free and powerful PDF processing software that works on both Windows and Mac OS.</p>
+        
+        <div class="benefits">
+            <h3>Why Use Ghostscript?</h3>
+            <ul>
+                <li>Completely free and open-source</li>
+                <li>Works offline (no internet required)</li>
+                <li>No file size limits</li>
+                <li>Better control over quality</li>
+                <li>Privacy-friendly (files stay on your computer)</li>
+                <li>Can merge AND compress in one step</li>
+            </ul>
+        </div>
+        
+        <h2>Windows Instructions</h2>
+        
+        <h3>Step 1: Installation</h3>
+        <p>Download and install Ghostscript from:</p>
+        <p><a href="https://www.ghostscript.com/download/gsdnld.html" target="_blank">https://www.ghostscript.com/download/gsdnld.html</a></p>
+        <p><strong>Important:</strong> Choose the <strong>AGPL Release - Windows 64-bit version</strong></p>
+        
+        <div class="note">
+            <strong>Tip:</strong> I put commands for Win 64-bit. If your Windows is 32-bit, change the 64 to 32 in the command line (e.g., <code>gswin32c</code> instead of <code>gswin64c</code>). How to know your Windows's BIT? Right-click on the Start menu and click <strong>System</strong>, you can see the System type there.
+        </div>
+        
+        <h3>Step 2: Reducing PDF File Size</h3>
+        <p>Let's assume your PDF file is on your Desktop and named <code>example.pdf</code>.</p>
+        <ol>
+            <li>Open <strong>Command Prompt</strong> from the Start menu (search for "cmd")</li>
+            <li>Edit the file names in the box below if needed, then click <strong>Copy</strong>:</li>
+        </ol>
+        
+        <div class="code-container">
+            <div class="code-header">
+                <span>Command <span class="edit-hint">(editable - change file names as needed)</span></span>
+                <button class="copy-btn" onclick="copyCode(this, 'code1')">
+                    <span>📋 Copy</span>
+                </button>
+            </div>
+            <textarea class="code-box" id="code1" spellcheck="false">cd Desktop
+gswin64c -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -sOutputFile=example_compressed.pdf example.pdf</textarea>
+        </div>
+        
+        <p><strong>How to customize:</strong></p>
+        <ul>
+            <li>Change <code>example.pdf</code> to your file name</li>
+            <li>Change <code>example_compressed.pdf</code> to your desired output name</li>
+            <li>If your file is in a different location, change <code>cd Desktop</code> to the correct path (e.g., <code>cd /d "C:\Documents"</code>)</li>
+        </ul>
+        
+        <h3>Quality Settings</h3>
+        <p>You can adjust the quality by changing <code>/printer</code> to one of these options:</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Setting</th>
+                    <th>Quality</th>
+                    <th>DPI</th>
+                    <th>File Size</th>
+                    <th>Best For</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>/screen</code></td>
+                    <td>Lowest</td>
+                    <td>72</td>
+                    <td>Smallest</td>
+                    <td>Screen viewing only</td>
+                </tr>
+                <tr>
+                    <td><code>/ebook</code></td>
+                    <td>Moderate</td>
+                    <td>150</td>
+                    <td>Medium</td>
+                    <td>General use</td>
+                </tr>
+                <tr class="highlight">
+                    <td><code>/printer</code></td>
+                    <td>High</td>
+                    <td>300</td>
+                    <td>Larger</td>
+                    <td><strong>Printing, submission</strong></td>
+                </tr>
+                <tr>
+                    <td><code>/prepress</code></td>
+                    <td>Highest</td>
+                    <td>300</td>
+                    <td>Largest</td>
+                    <td>Professional printing</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <p><strong>My recommendation:</strong> Use <code>/printer</code> for the best balance between quality and file size.</p>
+        
+        <h3>Step 3: Merging PDF Files</h3>
+        <p>Let's assume you have 3 PDF files on your Desktop: <code>example.pdf</code>, <code>example2.pdf</code>, and <code>example3.pdf</code>.</p>
+        <ol>
+            <li>Open Command Prompt</li>
+            <li>Edit the file names in the box below if needed, then click <strong>Copy</strong>:</li>
+        </ol>
+        
+        <div class="code-container">
+            <div class="code-header">
+                <span>Command <span class="edit-hint">(editable - change file names as needed)</span></span>
+                <button class="copy-btn" onclick="copyCode(this, 'code2')">
+                    <span>📋 Copy</span>
+                </button>
+            </div>
+            <textarea class="code-box" id="code2" spellcheck="false">cd Desktop
+gswin64c -sDEVICE=pdfwrite -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -sOutputFile=merged.pdf example.pdf example2.pdf example3.pdf</textarea>
+        </div>
+        
+        <p><strong>How to customize:</strong></p>
+        <ul>
+            <li>Change <code>example.pdf example2.pdf example3.pdf</code> to your file names</li>
+            <li>List files in the order you want them merged</li>
+            <li>Change <code>merged.pdf</code> to your desired output name</li>
+            <li>You can merge as many files as you want by listing them all</li>
+        </ul>
+        
+        <div class="note">
+            <strong>Bonus:</strong> Ghostscript automatically compresses the merged PDF to print quality (300 DPI), so you get both merging and size reduction in one command!
+        </div>
+        
+        <h2>Mac OS Instructions</h2>
+        
+        <h3>Step 1: Installation</h3>
+        <p><strong>Option A: Using Homebrew (Recommended if you have it)</strong></p>
+        
+        <div class="code-container">
+            <div class="code-header">
+                <span>Command</span>
+                <button class="copy-btn" onclick="copyCode(this, 'code3')">
+                    <span>📋 Copy</span>
+                </button>
+            </div>
+            <textarea class="code-box" id="code3" spellcheck="false">brew install ghostscript</textarea>
+        </div>
+        
+        <p><strong>Option B: Direct Download</strong></p>
+        <p>Download and install from:</p>
+        <p><a href="https://www.ghostscript.com/download/gsdnld.html" target="_blank">https://www.ghostscript.com/download/gsdnld.html</a></p>
+        <p>Choose the <strong>AGPL Release - macOS version</strong></p>
+        
+        <h3>Step 2: Reducing PDF File Size</h3>
+        <p>Let's assume your PDF file is on your Desktop and named <code>example.pdf</code>.</p>
+        <ol>
+            <li>Open <strong>Terminal</strong> (search for "Terminal" in Spotlight or find it in Applications → Utilities)</li>
+            <li>Edit the file names in the box below if needed, then click <strong>Copy</strong>:</li>
+        </ol>
+        
+        <div class="code-container">
+            <div class="code-header">
+                <span>Command <span class="edit-hint">(editable - change file names as needed)</span></span>
+                <button class="copy-btn" onclick="copyCode(this, 'code4')">
+                    <span>📋 Copy</span>
+                </button>
+            </div>
+            <textarea class="code-box" id="code4" spellcheck="false">cd ~/Desktop
+gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -sOutputFile=example_compressed.pdf example.pdf</textarea>
+        </div>
+        
+        <p><strong>How to customize:</strong></p>
+        <ul>
+            <li>Change <code>example.pdf</code> to your file name</li>
+            <li>Change <code>example_compressed.pdf</code> to your desired output name</li>
+            <li>If your file is in a different location, change <code>cd ~/Desktop</code> to the correct path (e.g., <code>cd ~/Documents</code>)</li>
+        </ul>
+        
+        <h3>Quality Settings</h3>
+        <p>Same quality options as Windows (see table above). My recommendation is still <code>/printer</code>.</p>
+        
+        <h3>Step 3: Merging PDF Files</h3>
+        <p>Let's assume you have 3 PDF files on your Desktop: <code>example.pdf</code>, <code>example2.pdf</code>, and <code>example3.pdf</code>.</p>
+        <ol>
+            <li>Open Terminal</li>
+            <li>Edit the file names in the box below if needed, then click <strong>Copy</strong>:</li>
+        </ol>
+        
+        <div class="code-container">
+            <div class="code-header">
+                <span>Command <span class="edit-hint">(editable - change file names as needed)</span></span>
+                <button class="copy-btn" onclick="copyCode(this, 'code5')">
+                    <span>📋 Copy</span>
+                </button>
+            </div>
+            <textarea class="code-box" id="code5" spellcheck="false">cd ~/Desktop
+gs -sDEVICE=pdfwrite -dPDFSETTINGS=/printer -dNOPAUSE -dQUIET -dBATCH -sOutputFile=merged.pdf example.pdf example2.pdf example3.pdf</textarea>
+        </div>
+        
+        <p><strong>How to customize:</strong></p>
+        <ul>
+            <li>Change <code>example.pdf example2.pdf example3.pdf</code> to your file names</li>
+            <li>List files in the order you want them merged</li>
+            <li>Change <code>merged.pdf</code> to your desired output name</li>
+            <li>You can merge as many files as you want by listing them all</li>
+        </ul>
+        
+        <div class="note">
+            <strong>Bonus:</strong> Just like Windows, Ghostscript automatically compresses the merged PDF to print quality!
+        </div>
+        
+        <h2>Key Differences: Windows vs Mac OS</h2>
+        
+        <table class="platform-diff">
+            <thead>
+                <tr>
+                    <th>Feature</th>
+                    <th>Windows</th>
+                    <th>Mac OS</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Terminal/Command Line</td>
+                    <td>Command Prompt (cmd)</td>
+                    <td>Terminal</td>
+                </tr>
+                <tr>
+                    <td>Ghostscript Command</td>
+                    <td><code>gswin64c</code></td>
+                    <td><code>gs</code></td>
+                </tr>
+                <tr>
+                    <td>Desktop Path</td>
+                    <td><code>cd Desktop</code></td>
+                    <td><code>cd ~/Desktop</code></td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <p><strong>Instructor:</strong> Milad Kasirian</p>
+            <p><strong>Email:</strong> <a href="mailto:miladkasirian@uri.edu">miladkasirian@uri.edu</a></p>
+        </div>
+    </div>
+    
+    <script>
+        function copyCode(button, codeId) {
+            const codeElement = document.getElementById(codeId);
+            const text = codeElement.value;
+            
+            navigator.clipboard.writeText(text).then(function() {
+                // Change button text
+                const span = button.querySelector('span');
+                const originalText = span.textContent;
+                span.textContent = '✓ Copied!';
+                button.classList.add('copied');
+                
+                // Reset after 2 seconds
+                setTimeout(function() {
+                    span.textContent = originalText;
+                    button.classList.remove('copied');
+                }, 2000);
+            }).catch(function(err) {
+                alert('Failed to copy. Please select and copy manually.');
+            });
+        }
+    </script>
+</body>
+</html>
