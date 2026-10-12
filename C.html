@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Financial Calculator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2032%2032%27%3E%3Crect%20width=%2732%27%20height=%2732%27%20rx=%276%27%20fill=%27%231F3864%27/%3E%3Crect%20x=%276%27%20y=%275%27%20width=%2720%27%20height=%277%27%20rx=%271.5%27%20fill=%27%239DBF8C%27/%3E%3Crect%20x=%276%27%20y=%2714.5%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%2713.5%27%20y=%2714.5%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%2721%27%20y=%2714.5%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%276%27%20y=%2720.0%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%2713.5%27%20y=%2720.0%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%2721%27%20y=%2720.0%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%276%27%20y=%2725.5%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%2713.5%27%20y=%2725.5%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23ffffff%27/%3E%3Crect%20x=%2721%27%20y=%2725.5%27%20width=%275%27%20height=%274%27%20rx=%271%27%20fill=%27%23C9A84C%27/%3E%3C/svg%3E">
 
 <!-- Webfont faces, self-hosted. Inlined at build time. -->
 <style data-source="fonts.css">
@@ -930,6 +931,46 @@ body {
   }
 }
 
+/*
+ * Made to fit the space it is given.
+ *
+ * On its own page this device is about 790 pixels tall, which is taller than
+ * the panel it opens in beside an exam question, so half of it was below the
+ * fold and the keys somebody actually needs were reached by scrolling. Rather
+ * than rebuild the keypad at another size, the whole device is scaled to the
+ * height available, which keeps every proportion and every hit target in
+ * relation to each other. The height is what runs out first, so that is what
+ * these are measured against.
+ *
+ * min-height goes back to nothing at the same time: a full viewport height
+ * measured inside a scaled box is taller than the viewport, which would bring
+ * back the scrollbar this is here to remove.
+ */
+/*
+ * The device is centred in whatever it is given, and the page around it is the
+ * same colour as the device, so there is no band of another colour at the edge.
+ */
+html, body { height: 100%; }
+body.fitted {
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px; overflow: hidden; background: #2a2a2a;
+}
+/*
+ * Laid out at its own size, then scaled. Never laid out small.
+ *
+ * Given a narrow frame the device reflowed to fit it - narrower keys, taller
+ * keypad - and then the scaling shrank that already-squashed layout again, so a
+ * small panel produced a tiny calculator sitting in a large empty rectangle. It
+ * is pinned to the width it was drawn for, and scaling is the only thing that
+ * changes its size, so it is the same device at every size and its proportions
+ * never move.
+ */
+body.fitted .calculator {
+  width: 420px; min-height: 0; margin: 0; flex: none;
+  border-radius: 16px; border: 2px solid var(--calc-edge);
+  padding: 14px 14px 18px;
+}
+
 /* ── LCD Display ────────────────────────────────────── */
 .display {
   background: linear-gradient(180deg, #9db889 0%, #7e9e6a 100%);
@@ -954,6 +995,50 @@ body {
   min-height: 14px;
   margin-bottom: 4px;
 }
+
+/*
+ * What you have worked out.
+ *
+ * This was first written in black on black: borders and a background at low
+ * opacity over a dark grey device, which is a smudge rather than a list, and a
+ * Clear button with no edge you could find. Everything here is light on dark,
+ * because that is what the device around it is.
+ */
+.tape {
+  margin: 10px 0 0;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 13px;
+  background: rgba(255,255,255,.05);
+  color: var(--pri-color);
+}
+.tape-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,.10);
+  font-weight: 700;
+  letter-spacing: .01em;
+}
+.tape-head button {
+  margin-left: auto;
+  font: inherit; font-size: 12px; font-weight: 700;
+  padding: 3px 12px; border-radius: 7px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.45);
+  background: rgba(255,255,255,.10); color: var(--pri-color);
+}
+.tape-head button:hover { background: rgba(255,255,255,.22); }
+.tape-list { list-style: none; margin: 0; padding: 0; max-height: 168px; overflow: auto; }
+.tape-list li {
+  display: flex; gap: 10px; align-items: baseline;
+  padding: 5px 10px; border-top: 1px solid rgba(255,255,255,.12);
+}
+.tape-list li .k { opacity: .8; min-width: 42px; }
+.tape-list li .v {
+  margin-left: auto; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tape-empty { padding: 8px 10px; opacity: .8; }
 
 .display-expr {
   font-family: 'Share Tech Mono', monospace;
@@ -1144,6 +1229,9 @@ body {
 }
 
 /* CF panel */
+.cf-row--on .cf-row-label { color: #f2c94c; }
+.cf-row--on input { border-color: #f2c94c !important; }
+#cfRate.cf-on { border-color: #f2c94c !important; }
 .cf-top {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1168,7 +1256,7 @@ body {
 
 .cf-row {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 2.6rem 1fr auto 1.4rem;   /* label, amount, how many, remove: one line each */
   gap: 5px;
   align-items: center;
 }
@@ -2166,6 +2254,18 @@ body {
                     <output class="display-screen" id="screen" aria-live="polite">0</output>
                 </div>
 
+                <!-- what has been worked out so far -->
+                <div class="tape" id="tape">
+                  <div class="tape-head">
+                    <span>What you have worked out</span>
+                    <button type="button" id="tapeClear"
+                      title="Empty this list. It does not change anything on the calculator itself.">Clear</button>
+                  </div>
+                  <ul class="tape-list" id="tapeList"></ul>
+                  <p class="tape-empty" id="tapeEmpty">Nothing yet. Everything you work out is
+                  listed here, so you can check a figure without doing it again.</p>
+                </div>
+
                 <!-- ── TVM WORKSHEET PANEL ── -->
                 <div class="panel-dock">
 <section class="worksheet" id="tvmPanel" aria-label="TVM Worksheet" hidden>
@@ -2458,6 +2558,49 @@ const fmt = (v) => {
 };
 
 const setScreen = (val) => { screenEl.textContent = val; };
+
+/* ── What has been worked out so far ─────────────────
+ * One line per finished calculation: the kind, what went in, and what came
+ * out. Nothing part-way through is listed, because a list of keystrokes is not
+ * something anybody reads. It lives only in this page, so putting the
+ * calculator away keeps it and closing the calculator loses it.
+ */
+const TAPE = [];
+const tapeListEl  = document.getElementById("tapeList");
+const tapeEmptyEl = document.getElementById("tapeEmpty");
+
+const drawTape = () => {
+  if (!tapeListEl) return;
+  tapeEmptyEl.hidden = TAPE.length > 0;
+  tapeListEl.innerHTML = TAPE.map((t) =>
+    '<li><span class="k">' + t.kind + '</span>' +
+    '<span class="w">' + t.what + '</span>' +
+    '<span class="v">' + t.value + '</span></li>').join("");
+  tapeListEl.scrollTop = tapeListEl.scrollHeight;
+};
+
+const noteTape = (kind, what, value) => {
+  const line = {
+    kind: String(kind || ""),
+    what: String(what || "").replace(/[<>&]/g, " ").slice(0, 60),
+    value: String(value)
+  };
+  const last = TAPE[TAPE.length - 1];
+  /* pressing equals twice on the same thing is one result, not two */
+  if (last && last.kind === line.kind && last.what === line.what &&
+      last.value === line.value) return;
+  TAPE.push(line);
+  if (TAPE.length > 60) TAPE.shift();
+  drawTape();
+};
+
+if (document.getElementById("tapeClear")) {
+  document.getElementById("tapeClear").addEventListener("click", () => {
+    TAPE.length = 0;
+    drawTape();
+  });
+}
+drawTape();
 const setExpr   = (val) => { exprEl.textContent = val; };
 const setStatus = (left = "", right = "") => {
   let parts = left.split(" ").filter(p => p !== "");
@@ -2619,6 +2762,7 @@ const appendValue = (v) => {
 };
 
 const safeEval = () => {
+  const before_ = expression;   /* what was entered, before it becomes the answer */
   try {
     let result;
     if (calcMode === "Chn") {
@@ -2628,6 +2772,7 @@ const safeEval = () => {
       result = Function('"use strict"; return (' + expression + ")")();
     }
     if (!Number.isFinite(result)) throw new Error("Bad expression");
+    noteTape("=", before_, fmt(result));
     lastResult = result;
     expression = String(result);
     setScreen(fmt(result));
@@ -2808,6 +2953,8 @@ const updateDisplay = () => {
       else if (varName === "PRN") setScreen(fmt(res.prn));
       else if (varName === "INT") setScreen(fmt(res.int));
     }
+  } else if (currentMode === "cf") {
+    cfDraw(sLeftParts);
   } else if (currentMode === "bgn") {
     setStatus(sLeftParts.join(" "), "");
     setExpr("SETTING");
@@ -2891,6 +3038,9 @@ const solveTVM = (target) => {
       tvmInputs.iy.value = fmt(result);
     }
 
+    noteTape("TVM", "N " + fmt(n) + "  I/Y " + fmt(getIyFromRate(r)) +
+             "  PV " + fmt(pv) + "  PMT " + fmt(pmt) + "  FV " + fmt(fv) +
+             "  \u2192 " + target.toUpperCase(), fmt(result));
     setScreen(fmt(result));
     setExpr(target.toUpperCase() + " =");
     setStatus("TVM", `CPT ${target.toUpperCase()} ✓`);
@@ -2986,8 +3136,180 @@ document.getElementById("btnAddCF").addEventListener("click", () => {
 
 document.getElementById("cfClose").addEventListener("click", () => {
   cfPanel.hidden = true;
+  if (currentMode === "cf") { currentMode = "standard"; cfBuf = ""; setExpr(""); setScreen(fmt(currentNum())); }
   setStatus("", "");
+  updateDisplay();
 });
+cfPanel.addEventListener("input", () => { cfNpv = null; cfIrr = null; if (currentMode === "cf" && cfBuf === "") updateDisplay(); });
+
+/* ── CF worksheet from the keys ──────────────────────────
+ * As on a BA II Plus: CF shows CF0, the down arrow walks C01, F01, C02, F02 ...
+ * and a number typed then ENTER is kept. NPV shows I, then NPV, and CPT works
+ * it out; IRR shows IRR and CPT works it out. 2ND DEL and 2ND INS take a cash
+ * flow out or put a blank one in, 2ND CLR WORK empties the worksheet, and
+ * 2ND QUIT leaves it. The panel below is the same list, so what the keys do is
+ * seen there too, with the line being worked on marked.
+ */
+let cfSub   = "cf";   // "cf" | "npv" | "irr"
+let cfPos   = 0;      // cf: 0 = CF0, 2k-1 = C0k, 2k = F0k.  npv: 0 = I, 1 = NPV
+let cfBuf   = "";     // what has been typed and not yet entered
+let cfNpv   = null;   // the last NPV worked out, shown at NPV
+let cfIrr   = null;   // the last IRR worked out
+
+const cfTwo = (k) => (k < 10 ? "0" + k : String(k));
+const cfRateVal = () => {
+  const v = parseFloat(String(document.getElementById("cfRate").value || "").replace(/,/g, ""));
+  return Number.isFinite(v) ? v : 0;
+};
+const cfWhere = () => {
+  if (cfSub === "npv") return cfPos === 0 ? { name: "I", val: cfRateVal() } : { name: "NPV", val: cfNpv };
+  if (cfSub === "irr") return { name: "IRR", val: cfIrr };
+  if (cfPos === 0) return { name: "CF0", val: cfEntries[0].cf || 0, row: 0 };
+  const k = Math.ceil(cfPos / 2);
+  const e = cfEntries[k] || { cf: 0, freq: 1 };
+  return cfPos % 2 ? { name: "C" + cfTwo(k), val: e.cf || 0, row: k }
+                   : { name: "F" + cfTwo(k), val: e.freq || 1, row: k };
+};
+
+function cfDraw(parts) {
+  const w = cfWhere();
+  setStatus(((parts || []).join(" ") + " " + (cfSub === "cf" ? "CF" : cfSub.toUpperCase())).trim(),
+            cfSub === "cf" ? (cfEntries.length - 1) + (cfEntries.length === 2 ? " flow" : " flows") : "");
+  setExpr(w.name + " =");
+  if (cfBuf !== "") setScreen(cfBuf);
+  else if (w.val === null || w.val === undefined) setScreen(fmt(0));
+  else setScreen(fmt(w.val));
+  document.querySelectorAll("#cfList .cf-row").forEach((r, i) => {
+    r.classList.toggle("cf-row--on", cfSub === "cf" && i === w.row);
+  });
+  const rate = document.getElementById("cfRate");
+  if (rate) rate.classList.toggle("cf-on", cfSub === "npv" && cfPos === 0);
+}
+
+const cfEnter = (sub) => {
+  currentMode = "cf";
+  cfSub = sub; cfPos = 0; cfBuf = "";
+  tvmPanel.hidden = true;
+  regOverlay.hidden = true;
+  cfPanel.hidden = false;
+  renderCFList();
+  updateDisplay();
+};
+
+const cfStore = () => {
+  if (cfBuf === "") return;
+  const v = parseFloat(cfBuf);
+  cfBuf = "";
+  if (!Number.isFinite(v)) return;
+  if (cfSub === "npv") {
+    if (cfPos === 0) { document.getElementById("cfRate").value = String(v); cfNpv = null; }
+    return;
+  }
+  if (cfSub !== "cf") return;
+  if (cfPos === 0) { cfEntries[0].cf = v; }
+  else {
+    const k = Math.ceil(cfPos / 2);
+    while (cfEntries.length <= k) cfEntries.push({ cf: 0, freq: 1 });
+    if (cfPos % 2) cfEntries[k].cf = v;
+    else cfEntries[k].freq = Math.max(1, Math.min(9999, Math.round(v)));
+  }
+  cfNpv = null; cfIrr = null;
+  renderCFList();
+};
+
+const cfMove = (step) => {
+  cfBuf = "";
+  if (cfSub === "npv") { cfPos = (cfPos + 2 + step) % 2; return; }
+  if (cfSub !== "cf") return;
+  /* one past the last flow is a fresh C, as on the calculator */
+  const last = 2 * (cfEntries.length - 1) + 1;
+  cfPos = Math.max(0, Math.min(last, cfPos + step));
+};
+
+const cfCompute = () => {
+  if (cfSub === "npv" && cfPos === 1) {
+    const r = cfRateVal() / 100;
+    cfNpv = calcNPV(r, cfEntries);
+    noteTape("NPV", "at " + cfRateVal() + "%, " + cfEntries.length + " cash flows", fmt(cfNpv));
+    lastResult = cfNpv; expression = String(cfNpv);
+    return true;
+  }
+  if (cfSub === "irr") {
+    const irr = bisect((r) => calcNPV(r, cfEntries), -0.9999, 10);
+    if (irr === null || !Number.isFinite(irr)) { showError("No IRR found: check the signs of the cash flows"); return false; }
+    cfIrr = irr * 100;
+    noteTape("IRR", cfEntries.length + " cash flows", fmt(cfIrr));
+    lastResult = cfIrr; expression = String(cfIrr);
+    return true;
+  }
+  return false;
+};
+
+/* every key while the worksheet is open; false means "not mine, carry on" */
+const cfKey = (val, action) => {
+  if (action === "2nd") { toggle2nd(); return true; }
+  if (val !== undefined && /^[0-9.]$/.test(val)) {
+    consume2nd();
+    if (cfSub === "irr" || (cfSub === "npv" && cfPos === 1)) return true;
+    if (val === "." && cfBuf.indexOf(".") >= 0) return true;
+    cfBuf = (cfBuf === "" && val === ".") ? "0." : cfBuf + val;
+    updateDisplay();
+    return true;
+  }
+  if (action === "plusMinus") {
+    if (consume2nd()) return false;                 // RESET: the calculator's own
+    if (cfBuf !== "") cfBuf = cfBuf.charAt(0) === "-" ? cfBuf.slice(1) : "-" + cfBuf;
+    else {
+      const w = cfWhere();
+      if (w.name.charAt(0) !== "F" && w.name !== "NPV" && w.name !== "IRR") cfBuf = String(-(w.val || 0));
+    }
+    updateDisplay();
+    return true;
+  }
+  if (action === "enter" || action === "equals" || action === "assign") {
+    consume2nd(); cfStore(); updateDisplay(); return true;
+  }
+  if (action === "arrowUp" || action === "arrowDn") {
+    const second = consume2nd();
+    if (second && cfSub === "cf" && cfPos > 0) {
+      const k = Math.ceil(cfPos / 2);
+      if (action === "arrowUp" && k < cfEntries.length) cfEntries.splice(k, 1);          // DEL
+      if (action === "arrowDn") cfEntries.splice(Math.min(k, cfEntries.length), 0, { cf: 0, freq: 1 }); // INS
+      cfPos = 2 * k - 1; cfBuf = ""; cfNpv = null; cfIrr = null;
+      cfMove(0);
+      renderCFList();
+    } else {
+      cfMove(action === "arrowUp" ? -1 : 1);
+    }
+    updateDisplay();
+    return true;
+  }
+  if (action === "backspace") {
+    consume2nd();
+    if (cfBuf !== "") cfBuf = cfBuf.slice(0, -1);
+    updateDisplay();
+    return true;
+  }
+  if (action === "clearAll") {
+    if (consume2nd()) {                              // CLR WORK
+      if (cfSub === "npv") document.getElementById("cfRate").value = "";
+      else { cfEntries = [{ cf: 0, freq: 1 }]; cfPos = 0; }
+      cfNpv = null; cfIrr = null; cfBuf = "";
+      renderCFList();
+    } else cfBuf = "";
+    updateDisplay();
+    return true;
+  }
+  if (action === "cpt") {
+    if (is2nd) return false;                         // QUIT: the calculator's own
+    if (cfCompute()) updateDisplay();
+    return true;
+  }
+  if (action === "cf")  { consume2nd(); cfEnter("cf");  return true; }
+  if (action === "npv") { consume2nd(); cfEnter("npv"); return true; }
+  if (action === "irr") { consume2nd(); cfEnter("irr"); return true; }
+  return false;
+};
 
 /* ── NPV calculation ─────────────────────────────────── */
 const calcNPV = (rate, entries) => {
@@ -3010,6 +3332,7 @@ document.getElementById("btnCptNPV").addEventListener("click", () => {
   if (!Number.isFinite(rate)) { showError("Invalid I/Y"); return; }
   try {
     const npv = calcNPV(rate, cfEntries);
+    noteTape("NPV", "at " + rateRaw + "%, " + cfEntries.length + " cash flows", fmt(npv));
     lastResult = npv;
     expression = String(npv);
     setScreen(fmt(npv));
@@ -3078,6 +3401,15 @@ document.getElementById("keypad").addEventListener("click", (e) => {
 
   const val    = btn.dataset.value;
   const action = btn.dataset.action;
+
+  // The cash flow worksheet takes its keys first; anything it does not use
+  // leaves it and is done as usual
+  if (currentMode === "cf") {
+    if (cfKey(val, action)) return;
+    currentMode = "standard";
+    cfBuf = "";
+    setExpr("");
+  }
 
   // Intercept keys when in BGN mode
   if (currentMode === "bgn") {
@@ -3431,22 +3763,20 @@ document.getElementById("keypad").addEventListener("click", (e) => {
   // ── CF Worksheet ─────────────────────────────────
   if (action === "cf") {
     consume2nd();
-    openCF();
+    cfEnter("cf");
     return;
   }
 
-  // ── NPV/IRR quick CPT ───────────────────────────
+  // ── NPV / IRR worksheets ────────────────────────
   if (action === "npv") {
     consume2nd();
-    openCF();
-    document.getElementById("cfRate").focus();
+    cfEnter("npv");
     return;
   }
 
   if (action === "irr") {
     consume2nd();
-    openCF();
-    document.getElementById("btnCptIRR").click();
+    cfEnter("irr");
     return;
   }
 
@@ -3689,8 +4019,17 @@ document.getElementById("keypad").addEventListener("click", (e) => {
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return; // don't intercept worksheet inputs
 
+  // The cash flow worksheet from the keyboard: the same as its keys
+  if (currentMode === "cf") {
+    const map = { Enter: ["enter"], "=": ["equals"], ArrowUp: ["arrowUp"], ArrowDown: ["arrowDn"],
+                  Backspace: ["backspace"], Escape: ["clearAll"] };
+    if (/^[0-9.]$/.test(e.key)) { e.preventDefault(); cfKey(e.key, undefined); return; }
+    if (e.key === "-" && cfBuf === "") { e.preventDefault(); cfKey(undefined, "plusMinus"); return; }
+    if (map[e.key]) { e.preventDefault(); cfKey(undefined, map[e.key][0]); return; }
+  }
+
   // Intercept for BGN, AMORT, and P/Y worksheet modes
-  if (currentMode !== "standard") {
+  if (currentMode !== "standard" && currentMode !== "cf") {
     if (currentMode === "bgn") {
       if (e.key === "Enter" || e.key === "=") {
         e.preventDefault();
@@ -4542,6 +4881,111 @@ document.addEventListener("DOMContentLoaded", () => {
   );
 })();
 
+</script>
+<script>
+/*
+ * Made to fit the space it is given.
+ *
+ * On its own page this device is about 790 pixels tall, which is taller than
+ * the panel it opens in beside an exam question, so half of it was below the
+ * fold and the keys somebody needs were reached by scrolling. Stepped sizes in
+ * a stylesheet got it on screen and left a band of empty colour wherever the
+ * step undershot, which looked like a mistake because it was one.
+ *
+ * So it is measured instead. The device is read at its own size once, and then
+ * scaled by exactly what it takes to fit the height and the width it has been
+ * given - never larger than its own size, because blown up it is just blurred.
+ * Anything that changes the space, including the window itself, measures again.
+ */
+(function () {
+  var el = document.querySelector('.calculator');
+  if (!el) return;
+  document.body.className = (document.body.className + ' fitted').trim();
+  var natW = 0, natH = 0;
+
+  /*
+   * Its own size, read with the scaling off.
+   *
+   * Taken from the content rather than from the box it is sitting in: the page
+   * centres it in whatever space there is, and a box smaller than the device
+   * reports the box. scrollHeight reports the device. Measured on every fit
+   * rather than once, because it costs one reflow and a cached number that has
+   * gone stale scales everything by the wrong amount with nothing to show why.
+   */
+  /*
+   * The device and whatever worksheet hangs off it, measured as one.
+   *
+   * An open worksheet (CF, TVM, the registers) sits outside the device's own
+   * box, below it or beside it, so measuring the device alone fitted the keys
+   * and left the worksheet half off the frame. Its overhang is now added to
+   * the size, and given to the device as a margin so the page centres the two
+   * together; every row the worksheet grows by is measured the same way.
+   */
+  function measure() {
+    el.style.zoom = '1';
+    el.style.marginBottom = '';
+    el.style.marginLeft = '';
+    var r = el.getBoundingClientRect();
+    var top = r.top, bottom = r.bottom, left = r.left, right = r.right;
+    var dock = el.querySelector('.panel-dock');
+    if (dock) {
+      Array.prototype.forEach.call(dock.children, function (c) {
+        if (c.hidden) return;
+        var q = c.getBoundingClientRect();
+        if (!q.width || !q.height) return;
+        top = Math.min(top, q.top); bottom = Math.max(bottom, q.bottom);
+        left = Math.min(left, q.left); right = Math.max(right, q.right);
+      });
+    }
+    var under = Math.max(0, bottom - r.bottom), beside = Math.max(0, r.left - left);
+    if (under) el.style.marginBottom = under + 'px';
+    if (beside) el.style.marginLeft = beside + 'px';
+    natW = Math.max(right - left, el.scrollWidth) || 420;
+    natH = Math.max(bottom - top, el.offsetHeight) || 790;
+  }
+
+  function fit() {
+    measure();
+    if (!natW || !natH) return;
+    /* rounded down, and a couple of pixels short of the edge: rounding up by a
+       thousandth is enough to put the device one pixel over and bring back the
+       scrollbar this is here to remove */
+    var z = Math.min(1, (window.innerWidth - 16) / natW, (window.innerHeight - 16) / natH);
+    if (!(z > 0)) return;
+    el.style.zoom = String(Math.max(0.25, Math.floor(z * 1000) / 1000));
+  }
+
+  /*
+   * Fitted again a moment after the last change, as well as on it.
+   *
+   * While somebody is dragging the corner of the panel the frame is resized
+   * many times a second and the last of those can land after the final layout,
+   * which left the device scaled for a size the frame no longer was. A trailing
+   * pass settles it, and a ResizeObserver catches the changes that a window
+   * resize event does not report at all.
+   */
+  var again = null;
+  function later() { clearTimeout(again); again = setTimeout(fit, 60); }
+
+  fit();
+  window.addEventListener('resize', function () { fit(); later(); });
+  try {
+    if (window.ResizeObserver) new ResizeObserver(later).observe(document.documentElement);
+  } catch (e) {}
+  /* a worksheet opening or closing, or a cash flow added or taken out */
+  try {
+    var dockEl = el.querySelector('.panel-dock');
+    if (dockEl && window.MutationObserver) {
+      new MutationObserver(later).observe(dockEl,
+        {attributes: true, attributeFilter: ['hidden'], childList: true, subtree: true});
+    }
+  } catch (e) {}
+  /* the fonts land after the first paint and change what its own size is */
+  window.addEventListener('load', function () { measure(); fit(); });
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { measure(); fit(); });
+  }
+})();
 </script>
 </body>
 </html>
