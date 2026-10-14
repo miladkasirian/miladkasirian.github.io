@@ -1028,6 +1028,9 @@ body.fitted .calculator {
   background: rgba(255,255,255,.10); color: var(--pri-color);
 }
 .tape-head button:hover { background: rgba(255,255,255,.22); }
+.tape-head #tapeReset { margin-left: auto; border-color: #e5484d; background: #c62828; color: #fff; }
+.tape-head #tapeReset:hover { background: #e53935; }
+.tape-head #tapeClear { margin-left: 0; }
 .tape-list { list-style: none; margin: 0; padding: 0; max-height: 168px; overflow: auto; }
 .tape-list li {
   display: flex; gap: 10px; align-items: baseline;
@@ -2258,6 +2261,8 @@ body.fitted .calculator {
                 <div class="tape" id="tape">
                   <div class="tape-head">
                     <span>What you have worked out</span>
+                    <button type="button" id="tapeReset"
+                      title="Reset the whole calculator, as 2ND RESET does: every value, every worksheet and this list.">Reset</button>
                     <button type="button" id="tapeClear"
                       title="Empty this list. It does not change anything on the calculator itself.">Clear</button>
                   </div>
@@ -3382,7 +3387,9 @@ const currentNum = () => {
   } catch { return parseFloat(expression) || 0; }
 };
 
-const applyMath = (fn) => {
+/* `label` names the step on the list of what has been worked out, from the
+   number it was done to: (x) => "√" + x gives "√16". */
+const applyMath = (fn, label) => {
   try {
     const x = currentNum();
     const result = fn(x);
@@ -3391,8 +3398,42 @@ const applyMath = (fn) => {
     expression = String(result);
     setScreen(fmt(result));
     setExpr("");
+    if (label) noteTape(label.kind, label.what(fmt(x)), fmt(result));
   } catch (e) { showError(e.message || "Math error"); }
 };
+
+/* ── RESET ──────────────────────────────────────────────
+ * As on a BA II Plus: 2ND +/- shows RST ?, ENTER resets, any other key leaves
+ * it alone. Everything goes back to how the calculator starts: the display,
+ * the memories, the TVM and cash flow worksheets (I/Y included), P/Y and C/Y,
+ * BGN, the format settings, and the list of what has been worked out. The red
+ * Reset button beside that list does the same in one press.
+ */
+let rstPending = false;
+const resetAll = () => {
+  rstPending = false;
+  MEM.fill(0);
+  expression = "0"; lastResult = 0; pendingOp = null; isCpt = false; isBgn = false;
+  is2nd = false; btn2nd.classList.remove("active");
+  currentMode = "standard";
+  amortP1 = 1; amortP2 = 1; amortActiveIndex = 0; amortInputBuffer = "";
+  pyVal = 1; cyVal = 1; pyActiveIndex = 0; pyInputBuffer = "";
+  decVal = 2; formatInputBuffer = ""; formatActiveIndex = 0;
+  calcMode = "Chn"; angleMode = "DEG"; dateMode = "US";
+  ["n", "iy", "pv", "pmt", "fv"].forEach((k) => { if (tvmInputs[k]) tvmInputs[k].value = ""; });
+  if (tvmInputs.py) tvmInputs.py.value = fmt(1);
+  if (tvmInputs.cy) tvmInputs.cy.value = fmt(1);
+  cfEntries = [{ cf: 0, freq: 1 }]; cfSub = "cf"; cfPos = 0; cfBuf = ""; cfNpv = null; cfIrr = null;
+  const rate = document.getElementById("cfRate"); if (rate) rate.value = "";
+  renderCFList();
+  tvmPanel.hidden = true; cfPanel.hidden = true; regOverlay.hidden = true;
+  TAPE.length = 0; drawTape();
+  setScreen(fmt(0)); setExpr(""); setStatus("", "RESET");
+  updateDisplay();
+};
+if (document.getElementById("tapeReset")) {
+  document.getElementById("tapeReset").addEventListener("click", resetAll);
+}
 
 /* ── Keypad click handler ────────────────────────────── */
 document.getElementById("keypad").addEventListener("click", (e) => {
@@ -3401,6 +3442,22 @@ document.getElementById("keypad").addEventListener("click", (e) => {
 
   const val    = btn.dataset.value;
   const action = btn.dataset.action;
+
+  if (rstPending) {
+    rstPending = false;
+    if (action === "enter" || action === "equals") { resetAll(); return; }
+    setStatus("", ""); setExpr(""); setScreen(fmt(currentNum())); updateDisplay();   // anything else: left as it was
+    return;
+  }
+  // 2ND +/- is RESET in every worksheet, so it is caught before any of them
+  if (action === "plusMinus" && is2nd) {
+    consume2nd();
+    rstPending = true;
+    setScreen("RST ?");
+    setExpr("ENTER resets everything. Any other key leaves it.");
+    setStatus("", "RESET");
+    return;
+  }
 
   // The cash flow worksheet takes its keys first; anything it does not use
   // leaves it and is done as usual
@@ -3947,7 +4004,7 @@ document.getElementById("keypad").addEventListener("click", (e) => {
   // ── Math functions ───────────────────────────────
   if (action === "percent") {
     consume2nd();
-    applyMath((x) => x / 100);
+    applyMath((x) => x / 100, { kind: "%", what: (x) => x + " %" });
     setExpr("÷ 100");
     return;
   }
@@ -3957,14 +4014,14 @@ document.getElementById("keypad").addEventListener("click", (e) => {
     applyMath((x) => {
       if (x < 0) throw new Error("√ of negative");
       return Math.sqrt(x);
-    });
+    }, { kind: "√x", what: (x) => "√" + x });
     setExpr("√x");
     return;
   }
 
   if (action === "square") {
     consume2nd();
-    applyMath((x) => x * x);
+    applyMath((x) => x * x, { kind: "x²", what: (x) => x + "²" });
     setExpr("x²");
     return;
   }
@@ -3974,7 +4031,7 @@ document.getElementById("keypad").addEventListener("click", (e) => {
     applyMath((x) => {
       if (x === 0) throw new Error("Divide by 0");
       return 1 / x;
-    });
+    }, { kind: "1/x", what: (x) => "1 / " + x });
     setExpr("1/x");
     return;
   }
@@ -3982,13 +4039,13 @@ document.getElementById("keypad").addEventListener("click", (e) => {
   if (action === "ln") {
     if (consume2nd()) {
       // eˣ
-      applyMath((x) => Math.exp(x));
+      applyMath((x) => Math.exp(x), { kind: "eˣ", what: (x) => "e^" + x });
       setExpr("eˣ");
     } else {
       applyMath((x) => {
         if (x <= 0) throw new Error("LN domain error");
         return Math.log(x);
-      });
+      }, { kind: "LN", what: (x) => "LN " + x });
       setExpr("LN");
     }
     return;
@@ -3996,7 +4053,7 @@ document.getElementById("keypad").addEventListener("click", (e) => {
 
   if (action === "inv") {
     consume2nd();
-    applyMath((x) => 1 / x);
+    applyMath((x) => 1 / x, { kind: "1/x", what: (x) => "1 / " + x });
     setExpr("INV");
     return;
   }
@@ -4018,6 +4075,14 @@ document.getElementById("keypad").addEventListener("click", (e) => {
 /* ── Keyboard support ────────────────────────────────── */
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return; // don't intercept worksheet inputs
+
+  // RST ? on the screen: Enter resets, anything else leaves it
+  if (rstPending && !["Shift", "Control", "Alt", "Meta"].includes(e.key)) {
+    e.preventDefault();
+    if (e.key === "Enter" || e.key === "=") { resetAll(); return; }
+    rstPending = false; setStatus("", ""); setExpr(""); setScreen(fmt(currentNum())); updateDisplay();
+    return;
+  }
 
   // The cash flow worksheet from the keyboard: the same as its keys
   if (currentMode === "cf") {
