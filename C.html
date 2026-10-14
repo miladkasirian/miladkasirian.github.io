@@ -2572,7 +2572,14 @@ const fmt = (v) => {
   return res;
 };
 
-const setScreen = (val) => { screenEl.textContent = val; };
+/* nPr, nCr and the INV yˣ root are kept as P, C and R in the expression;
+   on the display they are spelled out */
+const setScreen = (val) => {
+  let t = String(val);
+  if (/[PCR]/.test(t) && /^[0-9.eE+\-*/()PCR]+$/.test(t))
+    t = t.replace(/P/g, " nPr ").replace(/C/g, " nCr ").replace(/R/g, " root ");
+  screenEl.textContent = t;
+};
 
 /* ── What has been worked out so far ─────────────────
  * One line per finished calculation: the kind, what went in, and what came
@@ -2713,7 +2720,7 @@ const evaluateChainFlat = (tokens) => {
 const evaluateChain = (expr) => {
   let s = String(expr).trim();
   if (!s) return 0;
-  s = s.replace(/[+\-*/]+$/, "");
+  s = s.replace(/[+\-*/PCR]+$/, "");
   if (!s) return 0;
 
   const parenRegex = /\(([^()]+)\)/;
@@ -2724,7 +2731,7 @@ const evaluateChain = (expr) => {
     s = s.slice(0, match.index) + String(innerVal) + s.slice(match.index + match[0].length);
   }
 
-  const tokens = tokenizeFlat(s);
+  const tokens = tokenizeFlat(prepassPCR(s));
   return evaluateChainFlat(tokens);
 };
 
@@ -2733,12 +2740,12 @@ const appendValue = (v) => {
   pendingOp = null;
 
   // In Chn mode, when user enters a binary operator, collapse preceding chain if complete
-  if (calcMode === "Chn" && ["+", "-", "*", "/", "**"].includes(v)) {
+  if (calcMode === "Chn" && ["+", "-", "*", "/", "**", "P", "C", "R"].includes(v)) {
     const openParens = (expression.match(/\(/g) || []).length;
     const closeParens = (expression.match(/\)/g) || []).length;
 
-    if (/[+\-*/]$/.test(expression) && expression !== "-") {
-      expression = expression.replace(/[+\-*/]+$/, v);
+    if (/[+\-*/PCR]$/.test(expression) && expression !== "-") {
+      expression = expression.replace(/[+\-*/PCR]+$/, v);
       setScreen(expression);
       setExpr("");
       return;
@@ -2760,8 +2767,8 @@ const appendValue = (v) => {
   }
 
   // Replace duplicate trailing operators in any mode
-  if (["+", "*", "/"].includes(v) && /[+\-*/]$/.test(expression) && expression !== "-") {
-    expression = expression.replace(/[+\-*/]+$/, v);
+  if (["+", "*", "/", "P", "C", "R"].includes(v) && /[+\-*/PCR]$/.test(expression) && expression !== "-") {
+    expression = expression.replace(/[+\-*/PCR]+$/, v);
     setScreen(expression);
     setExpr("");
     return;
@@ -2774,14 +2781,22 @@ const appendValue = (v) => {
 };
 
 const safeEval = () => {
+  /* K: the operation and number before = become the constant; with a constant
+     kept, a plain number then = repeats it */
+  if (kArm) {
+    kArm = false;
+    const km = /(\*\*|[+\-*/])(-?\d*\.?\d+(?:e[+-]?\d+)?)$/.exec(expression);
+    kConst = km && /[0-9.)]/.test(expression.slice(0, km.index)) ? { op: km[1], val: km[2] } : null;
+  } else if (kConst && /^-?\d*\.?\d+(e[+-]?\d+)?$/.test(expression)) {
+    expression = expression + kConst.op + (kConst.val.charAt(0) === "-" ? "(" + kConst.val + ")" : kConst.val);
+  }
   const before_ = expression;   /* what was entered, before it becomes the answer */
   try {
     let result;
     if (calcMode === "Chn") {
       result = evaluateChain(expression);
     } else {
-      // eslint-disable-next-line no-new-func
-      result = Function('"use strict"; return (' + expression + ")")();
+      result = evalAOS(expression);
     }
     if (!Number.isFinite(result)) throw new Error("Bad expression");
     noteTape("=", before_, fmt(result));
@@ -2971,6 +2986,8 @@ const updateDisplay = () => {
     setScreen(isBgn ? "BGN" : "END");
   } else if (currentMode === "iconv") {
     iconvDraw();
+  } else if (currentMode === "ws") {
+    wsDraw();
   } else if (currentMode === "py") {
     setStatus(sLeftParts.join(" "), "");
     const varName = pyActiveIndex === 0 ? "P/Y" : "C/Y";
@@ -3152,7 +3169,7 @@ document.getElementById("cfClose").addEventListener("click", () => {
   setStatus("", "");
   updateDisplay();
 });
-cfPanel.addEventListener("input", () => { cfNpv = null; cfIrr = null; if (currentMode === "cf" && cfBuf === "") updateDisplay(); });
+cfPanel.addEventListener("input", () => { cfNpv = cfNfv = null; cfIrr = null; if (currentMode === "cf" && cfBuf === "") updateDisplay(); });
 
 /* ── CF worksheet from the keys ──────────────────────────
  * As on a BA II Plus: CF shows CF0, the down arrow walks C01, F01, C02, F02 ...
@@ -3167,6 +3184,27 @@ let cfPos   = 0;      // cf: 0 = CF0, 2k-1 = C0k, 2k = F0k.  npv: 0 = I, 1 = NPV
 let cfBuf   = "";     // what has been typed and not yet entered
 let cfNpv   = null;   // the last NPV worked out, shown at NPV
 let cfIrr   = null;   // the last IRR worked out
+let cfNfv   = null;   // the last NFV worked out
+
+/* NFV, PB and DPB, after NPV with the down arrow, as on the BA II Plus
+   Professional: NFV is NPV carried to the end of the last period; PB is how
+   many periods until the cash flows add back to zero, and DPB the same with
+   each one discounted at I. A part period counts as the share of that
+   period's cash flow needed. */
+const cfPeriods = () => cfEntries.slice(1).reduce((t, e) => t + (e.freq || 1), 0);
+const cfPayback = (rate) => {
+  let cum = cfEntries[0].cf || 0, t = 0;
+  if (cum >= 0) return NaN;
+  for (let i = 1; i < cfEntries.length; i++) {
+    for (let j = 0; j < (cfEntries[i].freq || 1); j++) {
+      t++;
+      const c = (cfEntries[i].cf || 0) / Math.pow(1 + rate, t);
+      if (cum < 0 && cum + c >= 0) return (t - 1) + (-cum / c);
+      cum += c;
+    }
+  }
+  return NaN;
+};
 
 const cfTwo = (k) => (k < 10 ? "0" + k : String(k));
 const cfRateVal = () => {
@@ -3174,7 +3212,12 @@ const cfRateVal = () => {
   return Number.isFinite(v) ? v : 0;
 };
 const cfWhere = () => {
-  if (cfSub === "npv") return cfPos === 0 ? { name: "I", val: cfRateVal() } : { name: "NPV", val: cfNpv };
+  if (cfSub === "npv") {
+    if (cfPos === 0) return { name: "I", val: cfRateVal() };
+    if (cfPos === 1) return { name: "NPV", val: cfNpv };
+    if (cfPos === 2) return { name: "NFV", val: cfNfv };
+    return { name: cfPos === 3 ? "PB" : "DPB", val: cfPayback(cfPos === 3 ? 0 : cfRateVal() / 100), auto: true };
+  }
   if (cfSub === "irr") return { name: "IRR", val: cfIrr };
   if (cfPos === 0) return { name: "CF0", val: cfEntries[0].cf || 0, row: 0 };
   const k = Math.ceil(cfPos / 2);
@@ -3191,6 +3234,8 @@ function cfDraw(parts) {
   if (cfBuf !== "") setScreen(cfBuf);
   else if (w.val === null || w.val === undefined) setScreen(fmt(0));
   else setScreen(fmt(w.val));
+  if (w.auto && Number.isFinite(w.val)) indComputed = true;
+  if (w.auto && !Number.isFinite(w.val)) setExpr(w.name + " = (not paid back)");
   document.querySelectorAll("#cfList .cf-row").forEach((r, i) => {
     r.classList.toggle("cf-row--on", cfSub === "cf" && i === w.row);
   });
@@ -3214,7 +3259,7 @@ const cfStore = () => {
   cfBuf = "";
   if (!Number.isFinite(v)) return;
   if (cfSub === "npv") {
-    if (cfPos === 0) { document.getElementById("cfRate").value = String(v); cfNpv = null; }
+    if (cfPos === 0) { document.getElementById("cfRate").value = String(v); cfNpv = cfNfv = null; }
     return;
   }
   if (cfSub !== "cf") return;
@@ -3225,13 +3270,13 @@ const cfStore = () => {
     if (cfPos % 2) cfEntries[k].cf = v;
     else cfEntries[k].freq = Math.max(1, Math.min(9999, Math.round(v)));
   }
-  cfNpv = null; cfIrr = null;
+  cfNpv = cfNfv = null; cfIrr = null;
   renderCFList();
 };
 
 const cfMove = (step) => {
   cfBuf = "";
-  if (cfSub === "npv") { cfPos = (cfPos + 2 + step) % 2; return; }
+  if (cfSub === "npv") { cfPos = (cfPos + 5 + step) % 5; return; }
   if (cfSub !== "cf") return;
   /* one past the last flow is a fresh C, as on the calculator */
   const last = 2 * (cfEntries.length - 1) + 1;
@@ -3239,6 +3284,14 @@ const cfMove = (step) => {
 };
 
 const cfCompute = () => {
+  if (cfSub === "npv" && cfPos === 2) {
+    const r = cfRateVal() / 100;
+    cfNpv = calcNPV(r, cfEntries);
+    cfNfv = cfNpv * Math.pow(1 + r, cfPeriods());
+    noteTape("NFV", "at " + cfRateVal() + "%, " + cfEntries.length + " cash flows", fmt(cfNfv));
+    lastResult = cfNfv; expression = String(cfNfv);
+    return true;
+  }
   if (cfSub === "npv" && cfPos === 1) {
     const r = cfRateVal() / 100;
     cfNpv = calcNPV(r, cfEntries);
@@ -3262,7 +3315,7 @@ const cfKey = (val, action) => {
   if (action === "2nd") { toggle2nd(); return true; }
   if (val !== undefined && /^[0-9.]$/.test(val)) {
     consume2nd();
-    if (cfSub === "irr" || (cfSub === "npv" && cfPos === 1)) return true;
+    if (cfSub === "irr" || (cfSub === "npv" && cfPos >= 1)) return true;
     if (val === "." && cfBuf.indexOf(".") >= 0) return true;
     cfBuf = (cfBuf === "" && val === ".") ? "0." : cfBuf + val;
     updateDisplay();
@@ -3273,7 +3326,7 @@ const cfKey = (val, action) => {
     if (cfBuf !== "") cfBuf = cfBuf.charAt(0) === "-" ? cfBuf.slice(1) : "-" + cfBuf;
     else {
       const w = cfWhere();
-      if (w.name.charAt(0) !== "F" && w.name !== "NPV" && w.name !== "IRR") cfBuf = String(-(w.val || 0));
+      if ((cfSub === "cf" && w.name.charAt(0) !== "F") || (cfSub === "npv" && cfPos === 0)) cfBuf = String(-(w.val || 0));
     }
     updateDisplay();
     return true;
@@ -3287,7 +3340,7 @@ const cfKey = (val, action) => {
       const k = Math.ceil(cfPos / 2);
       if (action === "arrowUp" && k < cfEntries.length) cfEntries.splice(k, 1);          // DEL
       if (action === "arrowDn") cfEntries.splice(Math.min(k, cfEntries.length), 0, { cf: 0, freq: 1 }); // INS
-      cfPos = 2 * k - 1; cfBuf = ""; cfNpv = null; cfIrr = null;
+      cfPos = 2 * k - 1; cfBuf = ""; cfNpv = cfNfv = null; cfIrr = null;
       cfMove(0);
       renderCFList();
     } else {
@@ -3306,7 +3359,7 @@ const cfKey = (val, action) => {
     if (consume2nd()) {                              // CLR WORK
       if (cfSub === "npv") document.getElementById("cfRate").value = "";
       else { cfEntries = [{ cf: 0, freq: 1 }]; cfPos = 0; }
-      cfNpv = null; cfIrr = null; cfBuf = "";
+      cfNpv = cfNfv = null; cfIrr = null; cfBuf = "";
       renderCFList();
     } else cfBuf = "";
     updateDisplay();
@@ -3389,8 +3442,7 @@ const currentNum = () => {
     if (calcMode === "Chn") {
       return evaluateChain(expression);
     }
-    // eslint-disable-next-line no-new-func
-    return Function('"use strict"; return (' + expression + ")")();
+    return evalAOS(expression);
   } catch { return parseFloat(expression) || 0; }
 };
 
@@ -3406,6 +3458,7 @@ const applyMath = (fn, label) => {
     setScreen(fmt(result));
     setExpr("");
     if (label) noteTape(label.kind, label.what(fmt(x)), fmt(result));
+    if (window.__ccFresh) window.__ccFresh();
   } catch (e) { showError(e.message || "Math error"); }
 };
 
@@ -3501,6 +3554,650 @@ const iconvKey = (val, action) => {
   return false;                                              // anything else leaves the worksheet
 };
 
+/* ── INV, HYP, K and the second-function maths ───────────
+ * As on a BA II Plus. INV is a modifier for the next key: INV LN is eˣ,
+ * INV yˣ takes a root (8 INV yˣ 3 = gives 2), INV SIN, COS and TAN give the
+ * angle. 2ND HYP makes the next SIN, COS or TAN hyperbolic (with INV, the
+ * inverse). Any other key drops both.
+ * 2ND K keeps the last operation and its number as a constant: 3 × 8 2ND K =
+ * gives 24, then 7 = gives 56 and 45 = gives 360. A key other than a number or
+ * = drops it.
+ * x!, RAND, ROUND, nPr and nCr are 2ND on ×, ÷, STO, − and +.
+ */
+let invOn = false, hypOn = false;
+let kArm = false, kConst = null;          // kConst: { op, val }
+let randSeed = null;                       // null: Math.random; a number: a repeatable sequence
+
+const randNext = () => {
+  if (randSeed === null) {
+    let r = 0;
+    while (r === 0) r = Math.random();
+    return r;
+  }
+  /* mulberry32, so a stored seed gives the same series every time */
+  randSeed = (randSeed + 0x6D2B79F5) >>> 0;
+  let t = randSeed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  return r === 0 ? 0.5 : r;
+};
+const setRandSeed = (v) => {
+  const n = Math.round(Math.abs(Number(v) || 0));
+  randSeed = n > 0 ? n >>> 0 : null;
+};
+
+/* y to the power x, also for a negative y when x is a whole number or the
+   reciprocal of an odd whole number (the calculator allows exactly these) */
+const powSafe = (y, x) => {
+  if (y >= 0) return Math.pow(y, x);
+  if (Number.isInteger(x)) return Math.pow(y, x);
+  const inv = 1 / x;
+  if (Math.abs(inv - Math.round(inv)) < 1e-9 && Math.round(inv) % 2 !== 0) return -Math.pow(-y, x);
+  throw new Error("Error 2: invalid argument");
+};
+
+const factorial = (n) => {
+  if (!Number.isInteger(n) || n < 0 || n > 69) throw new Error("Error 2: x! needs a whole number from 0 to 69");
+  let f = 1;
+  for (let i = 2; i <= n; i++) f *= i;
+  return f;
+};
+const combPerm = (n, r, perm) => {
+  if (!(n > 0) || !(r > 0) || !Number.isInteger(n) || !Number.isInteger(r))
+    throw new Error("Error 2: n and r must be whole numbers above 0");
+  if (r > n) return 0;
+  let v = 1;
+  for (let i = 0; i < r; i++) v *= (n - i);
+  if (!perm) for (let i = 2; i <= r; i++) v /= i;
+  return Math.round(v);
+};
+
+/* nPr, nCr and the INV yˣ root are kept in the expression as P, C and R between
+   two numbers, and worked out first, before the rest of the expression */
+const NUM_RE = "(\\d*\\.?\\d+(?:e[+-]?\\d+)?)";
+const PCR_RE = new RegExp(NUM_RE + "([PCR])(-?\\d*\\.?\\d+(?:e[+-]?\\d+)?)");
+const prepassPCR = (s) => {
+  let m, guard = 60;
+  while ((m = PCR_RE.exec(s)) && guard-- > 0) {
+    const a = parseFloat(m[1]), b = parseFloat(m[3]);
+    let v;
+    if (m[2] === "R") {
+      if (b === 0) throw new Error("Error 2: invalid argument");
+      v = powSafe(a, 1 / b);
+    } else v = combPerm(a, b, m[2] === "P");
+    s = s.slice(0, m.index) + String(v) + s.slice(m.index + m[0].length);
+  }
+  return s;
+};
+const evalAOS = (expr) => {
+  const s = prepassPCR(String(expr).replace(/[+\-*/PCR]+$/, ""));
+  // eslint-disable-next-line no-new-func
+  return Function('"use strict"; return (' + s + ")")();
+};
+
+/* the number on the display: what is shown when it is a plain number, as after
+   a TVM key, otherwise the expression worked out */
+const shownNumber = () => {
+  const t = screenEl.textContent.trim().replace(/,/g, "");
+  if (/^-?\d+(\.\d+)?(e[+-]?\d+)?$/i.test(t)) {
+    const n = parseFloat(t);
+    if (Number.isFinite(n)) return n;
+  }
+  return currentNum();
+};
+
+const trigKey = (name, inv, hyp) => {
+  const label = (hyp ? "HYP " : "") + (inv ? "INV " : "") + name.toUpperCase();
+  applyMath((x) => {
+    let r;
+    if (hyp) {
+      r = inv ? { sin: Math.asinh, cos: Math.acosh, tan: Math.atanh }[name](x)
+              : { sin: Math.sinh, cos: Math.cosh, tan: Math.tanh }[name](x);
+    } else if (inv) {
+      r = { sin: Math.asin, cos: Math.acos, tan: Math.atan }[name](x);
+      if (angleMode === "DEG") r = r * 180 / Math.PI;
+    } else {
+      const a = angleMode === "DEG" ? x * Math.PI / 180 : x;
+      r = Math[name](a);
+    }
+    if (!Number.isFinite(r)) throw new Error("Error 2: invalid argument");
+    if (Math.abs(r) < 1e-13) r = 0;
+    return r;
+  }, { kind: label, what: (x) => label + " " + x });
+  setExpr(label);
+};
+
+/* ── The other worksheets ────────────────────────────────
+ * As on a BA II Plus: 2ND then 1 DATE, 3 PROFIT, 4 DEPR, 5 △%, 6 BRKEVN,
+ * 7 DATA, 8 STAT, 9 BOND, 0 MEM. In each one the arrows move between the
+ * variables; a number typed then ENTER is kept (+ − × ÷ yˣ before the number
+ * work on the value already there, so + 65 ENTER adds 65); CPT works out the
+ * one shown; 2ND SET changes a setting; 2ND CLR WORK clears the worksheet;
+ * 2ND QUIT leaves it, and so does any key the worksheet does not use.
+ * Dates are typed as mm.ddyy (dd.mmyy in the European format).
+ */
+const wsFail = (code, msg) => { const e = new Error(msg); e.code = code; throw e; };
+const roundShown = (v) => (decVal === 9 ? v : Math.round(v * Math.pow(10, decVal)) / Math.pow(10, decVal));
+
+/* dates */
+const dLeap = (y) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+const dDim = (y, m) => [31, dLeap(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+const dSerial = (d) => Math.round(Date.UTC(d.y, d.m - 1, d.d) / 86400000);
+const dFromSerial = (n) => {
+  const t = new Date(n * 86400000);
+  return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() };
+};
+const d360 = (a, b) => {
+  let d1 = a.d, d2 = b.d;
+  if (d1 === 31) d1 = 30;
+  if (d2 === 31 && d1 >= 30) d2 = 30;
+  return (b.y - a.y) * 360 + (b.m - a.m) * 30 + (d2 - d1);
+};
+const dText = (d) => {
+  const two = (k) => (k < 10 ? "0" + k : String(k));
+  return dateMode === "EUR" ? d.d + "-" + two(d.m) + "-" + d.y : d.m + "-" + two(d.d) + "-" + d.y;
+};
+const dDow = (d) => ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][new Date(dSerial(d) * 86400000).getUTCDay()];
+const dInRange = (d) => d.y >= 1980 && d.y <= 2079;
+/* "6.1206" is June 12, 2006 (US) or 6 December 2006 (European) */
+const dParse = (buf) => {
+  const m = /^(\d{1,2})\.(\d{2})(\d{2})$/.exec(String(buf).trim());
+  if (!m) wsFail(6, "Type the date as " + (dateMode === "EUR" ? "dd.mmyy" : "mm.ddyy") + ", then ENTER");
+  let a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+  const yy = parseInt(m[3], 10);
+  const y = yy >= 80 ? 1900 + yy : 2000 + yy;
+  const mo = dateMode === "EUR" ? b : a, da = dateMode === "EUR" ? a : b;
+  if (mo < 1 || mo > 12 || da < 1 || da > dDim(y, mo)) wsFail(6, "Invalid date");
+  return { y, m: mo, d: da };
+};
+const D_DEFAULT = () => ({ y: 1990, m: 12, d: 31 });
+
+let wsId = null, wsPos = 0, wsBuf = "", wsErr = false;
+const wsDow = {};                                    // dates that were worked out show the weekday
+
+/* DATE */
+let dateW = { dt1: D_DEFAULT(), dt2: D_DEFAULT(), dbd: 0, act: true };
+/* PROFIT */
+let profW = { cst: 0, sel: 0, mar: 0 };
+/* BRKEVN */
+let brkW = { fc: 0, vc: 0, p: 0, pft: 0, q: 0 };
+/* △% */
+let pchW = { old: 0, nw: 0, ch: 0, pd: 1 };
+/* DEPR */
+const DEPR_METHODS = ["SL", "SYD", "DB", "DBX"];
+let deprW = { method: "SL", db: 200, dbx: 200, lif: 1, m01: 1, cst: 0, sal: 0, yr: 1 };
+/* BOND */
+let bondW = { sdt: D_DEFAULT(), cpn: 0, rdt: D_DEFAULT(), rv: 100, act: true, m: 2, yld: 0, pri: 0 };
+/* DATA and STAT */
+const STAT_METHODS = ["LIN", "Ln", "EXP", "PWR", "1-V"];
+let statPts = [];                                    // { x, y }
+let statMethod = "LIN", statXp = 0, statYp = 0;
+
+const wsResetAll = () => {
+  dateW = { dt1: D_DEFAULT(), dt2: D_DEFAULT(), dbd: 0, act: true };
+  profW = { cst: 0, sel: 0, mar: 0 };
+  brkW = { fc: 0, vc: 0, p: 0, pft: 0, q: 0 };
+  pchW = { old: 0, nw: 0, ch: 0, pd: 1 };
+  deprW = { method: "SL", db: 200, dbx: 200, lif: 1, m01: 1, cst: 0, sal: 0, yr: 1 };
+  bondW = { sdt: D_DEFAULT(), cpn: 0, rdt: D_DEFAULT(), rv: 100, act: true, m: 2, yld: 0, pri: 0 };
+  statPts = []; statMethod = "LIN"; statXp = 0; statYp = 0;
+  Object.keys(wsDow).forEach((k) => { delete wsDow[k]; });
+  wsId = null; wsPos = 0; wsBuf = ""; wsErr = false;
+};
+
+/* a variable of a worksheet: k its name, t its type (e enter, c compute,
+   ec both, a worked out when shown, s a setting, se a setting with a value) */
+const wsVar = (k, t, get, set, cpt, more) => Object.assign({ k, t, get, set, cpt }, more || {});
+const nz = (x, msg) => { if (x === 0 || !Number.isFinite(x)) wsFail(1, msg || "Divide by 0"); return x; };
+
+/* ── BOND ── */
+const bondAddMonths = (d, k, eom) => {
+  let y = d.y, m = d.m + k;
+  while (m > 12) { m -= 12; y++; }
+  while (m < 1) { m += 12; y--; }
+  const dim = dDim(y, m);
+  return { y, m, d: eom ? dim : Math.min(d.d, dim) };
+};
+const bondParts = () => {
+  const b = bondW, s = b.sdt, r = b.rdt, M = b.m;
+  if (dSerial(r) <= dSerial(s)) wsFail(6, "RDT must be after SDT");
+  const step = 12 / M;
+  const eom = r.d === dDim(r.y, r.m);
+  let k = 0, prev = r;
+  while (dSerial(prev) > dSerial(s)) { k++; prev = bondAddMonths(r, -step * k, eom); }
+  const next = bondAddMonths(r, -step * (k - 1), eom);
+  let A, E, DSC, DSR;
+  if (b.act) {
+    A = dSerial(s) - dSerial(prev); E = dSerial(next) - dSerial(prev);
+    DSC = dSerial(next) - dSerial(s); DSR = dSerial(r) - dSerial(s);
+  } else {
+    A = d360(prev, s); E = 360 / M; DSC = E - A; DSR = d360(s, r);
+  }
+  return { N: k, A, E, DSC, DSR, M, R: b.cpn / 100, RV: b.rv };
+};
+const bondPrice = (yld) => {
+  const p = bondParts(), Y = yld / 100, cp = 100 * p.R / p.M;
+  const ai = cp * p.A / p.E;
+  let pri;
+  if (p.N <= 1) {
+    pri = (p.RV + cp) / (1 + (p.DSR / p.E) * (Y / p.M)) - ai;
+  } else {
+    const g = 1 + Y / p.M, f = p.DSC / p.E;
+    pri = p.RV / Math.pow(g, p.N - 1 + f);
+    for (let K = 1; K <= p.N; K++) pri += cp / Math.pow(g, K - 1 + f);
+    pri -= ai;
+  }
+  return { pri, ai };
+};
+const bondYield = (pri) => {
+  const p = bondParts(), cp = 100 * p.R / p.M;
+  if (p.N <= 1) {
+    const ai = cp * p.A / p.E;
+    const a = p.RV / 100 + p.R / p.M, b = pri / 100 + (p.A / p.E) * (p.R / p.M);
+    return 100 * ((a - b) / b) * (p.M * p.E / p.DSR);
+  }
+  let lo = -0.99 * p.M * 100 + 1e-6, hi = 1000;
+  const f = (y) => bondPrice(y).pri - pri;
+  let flo = f(lo), fhi = f(hi);
+  if (!Number.isFinite(flo) || !Number.isFinite(fhi) || flo * fhi > 0) wsFail(7, "No yield found");
+  for (let i = 0; i < 300; i++) {
+    const mid = (lo + hi) / 2, fm = f(mid);
+    if (Math.abs(fm) < 1e-12) return mid;
+    if (flo * fm < 0) { hi = mid; fhi = fm; } else { lo = mid; flo = fm; }
+  }
+  return (lo + hi) / 2;
+};
+
+/* ── DEPR ── */
+const deprCalc = () => {
+  const w = deprW, m = w.method;
+  if (w.sal > w.cst) wsFail(2, "SAL is more than CST");
+  if (m !== "SL" && !Number.isInteger(w.lif)) wsFail(4, "LIF must be a whole number for " + m);
+  const f = (13 - w.m01) / 12;
+  const base = w.cst - w.sal;
+  const lastYr = Math.ceil(w.lif + 1 - f - 1e-9);
+  const pct = m === "DBX" ? w.dbx : w.db;
+  let rbv = w.cst, rdv = base, dep = 0;
+  for (let y = 1; y <= w.yr; y++) {
+    if (rdv <= 0) { dep = 0; continue; }
+    if (y >= lastYr) dep = rdv;
+    else if (m === "SL") dep = y === 1 ? base / w.lif * f : base / w.lif;
+    else if (m === "SYD") {
+      const S = w.lif * (w.lif + 1) / 2;
+      dep = y === 1 ? w.lif * base / S * f : (w.lif + 2 - y - f) * base / S;
+    } else {
+      const rate = pct / (w.lif * 100);
+      if (y === 1) dep = (w.cst * rate > rdv) ? rdv * f : w.cst * rate * f;
+      else dep = rbv * rate;
+      if (m === "DBX") {
+        const left = y === 1 ? w.lif : w.lif - f - (y - 2);
+        const sl = left > 0 ? rdv / left * (y === 1 ? f : 1) : rdv;
+        if (sl > dep) dep = sl;
+      }
+    }
+    if (dep > rdv) dep = rdv;
+    dep = roundShown(dep);
+    rbv = roundShown(rbv - dep);
+    rdv = roundShown(rdv - dep);
+  }
+  return { dep, rbv, rdv };
+};
+
+/* ── STAT ── */
+const statCalc = () => {
+  if (!statPts.length) wsFail(5, "No data: enter it with 2ND DATA");
+  const m = statMethod;
+  let n = 0, sx = 0, sxx = 0, sy = 0, syy = 0, sxy = 0;
+  statPts.forEach((p) => {
+    if (m === "1-V") { const f = p.y; n += f; sx += f * p.x; sxx += f * p.x * p.x; return; }
+    let x = p.x, y = p.y;
+    if (m === "Ln" || m === "PWR") { if (!(x > 0)) wsFail(2, "Every X must be above 0 for " + m); x = Math.log(x); }
+    if (m === "EXP" || m === "PWR") { if (!(y > 0)) wsFail(2, "Every Y must be above 0 for " + m); y = Math.log(y); }
+    n++; sx += x; sxx += x * x; sy += y; syy += y * y; sxy += x * y;
+  });
+  const pop = (s, ss) => Math.sqrt(Math.max(0, (ss - s * s / n) / n));
+  const smp = (s, ss) => (n > 1 ? Math.sqrt(Math.max(0, (ss - s * s / n) / (n - 1))) : NaN);
+  const o = { n, xm: sx / n, Sx: smp(sx, sxx), ox: pop(sx, sxx), sx, sxx };
+  if (m !== "1-V") {
+    Object.assign(o, { ym: sy / n, Sy: smp(sy, syy), oy: pop(sy, syy), sy, syy, sxy });
+    const den = n * sxx - sx * sx;
+    const b1 = Math.abs(den) > 1e-300 ? (n * sxy - sx * sy) / den : NaN;
+    const a1 = (sy - b1 * sx) / n;
+    o.r = o.oy > 0 && o.ox > 0 ? b1 * o.ox / o.oy : NaN;
+    if (m === "EXP") { o.a = Math.exp(a1); o.b = Math.exp(b1); }
+    else if (m === "PWR") { o.a = Math.exp(a1); o.b = b1; }
+    else { o.a = a1; o.b = b1; }
+  }
+  return o;
+};
+const statY = (x) => {
+  const s = statCalc(), m = statMethod;
+  if (!Number.isFinite(s.a) || !Number.isFinite(s.b)) wsFail(1, "All the X values are the same");
+  if (m === "LIN") return s.a + s.b * x;
+  if (m === "Ln") { if (!(x > 0)) wsFail(2, "X' must be above 0"); return s.a + s.b * Math.log(x); }
+  if (m === "EXP") return s.a * Math.pow(s.b, x);
+  if (!(x > 0)) wsFail(2, "X' must be above 0");
+  return s.a * Math.pow(x, s.b);
+};
+const statX = (y) => {
+  const s = statCalc(), m = statMethod;
+  if (!Number.isFinite(s.a) || !Number.isFinite(s.b) || s.b === 0) wsFail(1, "No X for this line");
+  if (m === "LIN") return (y - s.a) / s.b;
+  if (m === "Ln") return Math.exp((y - s.a) / s.b);
+  if (m === "EXP") { if (!(y / s.a > 0)) wsFail(2, "Invalid argument"); return Math.log(y / s.a) / Math.log(s.b); }
+  if (!(y / s.a > 0)) wsFail(2, "Invalid argument");
+  return Math.pow(y / s.a, 1 / s.b);
+};
+
+const posNum = (x, code, msg) => { if (!(x > 0)) wsFail(code, msg); return x; };
+
+const WS = {
+  date: {
+    title: "DATE", key: "1",
+    items: () => [
+      wsVar("DT1", "ec", () => dateW.dt1, (d) => { dateW.dt1 = d; }, () => {
+        if (!dateW.act) wsFail(5, "With 360, only DBD can be worked out");
+        const d = dFromSerial(dSerial(dateW.dt2) - Math.round(dateW.dbd));
+        if (!dInRange(d)) wsFail(4, "The date is outside 1980 to 2079");
+        dateW.dt1 = d; return d;
+      }, { date: true }),
+      wsVar("DT2", "ec", () => dateW.dt2, (d) => { dateW.dt2 = d; }, () => {
+        if (!dateW.act) wsFail(5, "With 360, only DBD can be worked out");
+        const d = dFromSerial(dSerial(dateW.dt1) + Math.round(dateW.dbd));
+        if (!dInRange(d)) wsFail(4, "The date is outside 1980 to 2079");
+        dateW.dt2 = d; return d;
+      }, { date: true }),
+      wsVar("DBD", "ec", () => dateW.dbd, (x) => { dateW.dbd = x; }, () => {
+        dateW.dbd = dateW.act ? dSerial(dateW.dt2) - dSerial(dateW.dt1) : d360(dateW.dt1, dateW.dt2);
+        return dateW.dbd;
+      }),
+      wsVar("ACT", "s", null, null, null, { text: () => (dateW.act ? "ACT" : "360"), next: () => { dateW.act = !dateW.act; } })
+    ],
+    clear: () => { dateW.dt1 = D_DEFAULT(); dateW.dt2 = D_DEFAULT(); dateW.dbd = 0; },
+    note: (it, val) => "DT1 " + dText(dateW.dt1) + ", DT2 " + dText(dateW.dt2) + " to " + it.k
+  },
+  profit: {
+    title: "PROFIT", key: "3",
+    items: () => [
+      wsVar("CST", "ec", () => profW.cst, (x) => { profW.cst = x; }, () => (profW.cst = profW.sel * (1 - profW.mar / 100))),
+      wsVar("SEL", "ec", () => profW.sel, (x) => { profW.sel = x; }, () => (profW.sel = profW.cst / nz(1 - profW.mar / 100))),
+      wsVar("MAR", "ec", () => profW.mar, (x) => { profW.mar = x; }, () => (profW.mar = (profW.sel - profW.cst) / nz(profW.sel) * 100))
+    ],
+    clear: () => { profW = { cst: 0, sel: 0, mar: 0 }; }
+  },
+  depr: {
+    title: "DEPR", key: "4",
+    items: () => {
+      const w = deprW, isDb = w.method === "DB" || w.method === "DBX";
+      return [
+        wsVar(w.method, isDb ? "se" : "s", () => (w.method === "DBX" ? w.dbx : w.db),
+          (x) => { posNum(x, 4, "The declining balance percent must be above 0"); if (w.method === "DBX") w.dbx = x; else w.db = x; },
+          null, { text: () => w.method, next: () => { w.method = DEPR_METHODS[(DEPR_METHODS.indexOf(w.method) + 1) % DEPR_METHODS.length]; } }),
+        wsVar("LIF", "e", () => w.lif, (x) => { posNum(x, 4, "LIF must be above 0"); w.lif = x; }),
+        wsVar("M01", "e", () => w.m01, (x) => { if (!(x >= 1 && x < 13)) wsFail(4, "M01 must be from 1 up to 13"); w.m01 = x; }),
+        wsVar("CST", "e", () => w.cst, (x) => { if (x < 0) wsFail(4, "CST cannot be below 0"); w.cst = x; }),
+        wsVar("SAL", "e", () => w.sal, (x) => { if (x < 0) wsFail(4, "SAL cannot be below 0"); w.sal = x; }),
+        wsVar("YR", "e", () => w.yr, (x) => { if (!(x >= 1) || !Number.isInteger(x)) wsFail(4, "YR must be a whole number from 1"); w.yr = x; },
+          () => (w.yr += 1), { quiet: true }),
+        wsVar("DEP", "a", () => deprCalc().dep),
+        wsVar("RBV", "a", () => deprCalc().rbv),
+        wsVar("RDV", "a", () => deprCalc().rdv)
+      ];
+    },
+    /* past RDV the down arrow goes back to YR, for the next year */
+    move: (step, len) => (step > 0 && wsPos === len - 1 ? 5 : (wsPos + step + len) % len),
+    clear: () => { deprW.lif = 1; deprW.yr = 1; deprW.cst = 0; deprW.sal = 0; }
+  },
+  pch: {
+    title: "△%", key: "5",
+    items: () => {
+      const w = pchW;
+      return [
+        wsVar("OLD", "ec", () => w.old, (x) => { w.old = x; }, () => (w.old = w.nw / Math.pow(1 + w.ch / 100, w.pd))),
+        wsVar("NEW", "ec", () => w.nw, (x) => { w.nw = x; }, () => (w.nw = w.old * Math.pow(1 + w.ch / 100, w.pd))),
+        wsVar("%CH", "ec", () => w.ch, (x) => { w.ch = x; }, () => {
+          const q = w.nw / nz(w.old); nz(w.pd, "#PD is 0");
+          if (q < 0 && !Number.isInteger(1 / w.pd)) wsFail(2, "Invalid argument");
+          return (w.ch = (powSafe(q, 1 / w.pd) - 1) * 100);
+        }),
+        wsVar("#PD", "ec", () => w.pd, (x) => { w.pd = x; }, () => {
+          const q = w.nw / nz(w.old);
+          if (!(q > 0) || !(1 + w.ch / 100 > 0)) wsFail(2, "Invalid argument");
+          return (w.pd = Math.log(q) / nz(Math.log(1 + w.ch / 100), "%CH is 0"));
+        })
+      ];
+    },
+    clear: () => { pchW = { old: 0, nw: 0, ch: 0, pd: 1 }; }
+  },
+  brk: {
+    title: "BRKEVN", key: "6",
+    items: () => {
+      const w = brkW;
+      return [
+        wsVar("FC", "ec", () => w.fc, (x) => { w.fc = x; }, () => (w.fc = (w.p - w.vc) * w.q - w.pft)),
+        wsVar("VC", "ec", () => w.vc, (x) => { w.vc = x; }, () => (w.vc = w.p - (w.fc + w.pft) / nz(w.q))),
+        wsVar("P", "ec", () => w.p, (x) => { w.p = x; }, () => (w.p = (w.fc + w.pft) / nz(w.q) + w.vc)),
+        wsVar("PFT", "ec", () => w.pft, (x) => { w.pft = x; }, () => (w.pft = (w.p - w.vc) * w.q - w.fc)),
+        wsVar("Q", "ec", () => w.q, (x) => { w.q = x; }, () => (w.q = (w.fc + w.pft) / nz(w.p - w.vc)))
+      ];
+    },
+    clear: () => { brkW = { fc: 0, vc: 0, p: 0, pft: 0, q: 0 }; }
+  },
+  data: {
+    title: "DATA", key: "7",
+    items: () => {
+      const out = [], n = Math.min(statPts.length + 1, 50);
+      for (let i = 0; i < n; i++) {
+        const nn = i + 1 < 10 ? "0" + (i + 1) : String(i + 1);
+        out.push(wsVar("X" + nn, "e", () => (statPts[i] ? statPts[i].x : 0),
+          (x) => { if (statPts[i]) statPts[i].x = x; else statPts[i] = { x, y: 1 }; }));
+        out.push(wsVar("Y" + nn, "e", () => (statPts[i] ? statPts[i].y : 1),
+          (y) => { if (statPts[i]) statPts[i].y = y; else statPts[i] = { x: 0, y }; }));
+      }
+      return out;
+    },
+    move: (step, len) => Math.max(0, Math.min(len - 1, wsPos + step)),
+    clear: () => { statPts = []; statXp = 0; statYp = 0; }
+  },
+  stat: {
+    title: "STAT", key: "8",
+    items: () => {
+      const one = statMethod === "1-V";
+      const a = (k, f) => wsVar(k, "a", () => {
+        const x = f(statCalc());
+        if (!Number.isFinite(x)) wsFail(1, "Not enough different data for " + k);
+        return x;
+      });
+      const out = [
+        wsVar(statMethod, "s", null, null, null, { text: () => statMethod,
+          next: () => { statMethod = STAT_METHODS[(STAT_METHODS.indexOf(statMethod) + 1) % STAT_METHODS.length]; } }),
+        a("n", (s) => s.n), a("x̄", (s) => s.xm), a("Sx", (s) => s.Sx), a("σx", (s) => s.ox)
+      ];
+      if (!one) {
+        out.push(a("ȳ", (s) => s.ym), a("Sy", (s) => s.Sy), a("σy", (s) => s.oy),
+          a("a", (s) => s.a), a("b", (s) => s.b), a("r", (s) => s.r),
+          wsVar("X'", "ec", () => statXp, (x) => { statXp = x; }, () => (statXp = statX(statYp))),
+          wsVar("Y'", "ec", () => statYp, (y) => { statYp = y; }, () => (statYp = statY(statXp))));
+      }
+      out.push(a("Σx", (s) => s.sx), a("Σx²", (s) => s.sxx));
+      if (!one) out.push(a("Σy", (s) => s.sy), a("Σy²", (s) => s.syy), a("Σxy", (s) => s.sxy));
+      return out;
+    },
+    clear: () => { statMethod = "LIN"; statXp = 0; statYp = 0; }
+  },
+  bond: {
+    title: "BOND", key: "9",
+    items: () => {
+      const w = bondW;
+      return [
+        wsVar("SDT", "e", () => w.sdt, (d) => { w.sdt = d; }, null, { date: true }),
+        wsVar("CPN", "e", () => w.cpn, (x) => { if (x < 0) wsFail(4, "CPN cannot be below 0"); w.cpn = x; }),
+        wsVar("RDT", "e", () => w.rdt, (d) => { w.rdt = d; }, null, { date: true }),
+        wsVar("RV", "e", () => w.rv, (x) => { posNum(x, 4, "RV must be above 0"); w.rv = x; }),
+        wsVar("ACT", "s", null, null, null, { text: () => (w.act ? "ACT" : "360"), next: () => { w.act = !w.act; } }),
+        wsVar("2/Y", "s", null, null, null, { text: () => (w.m === 2 ? "2/Y" : "1/Y"), next: () => { w.m = w.m === 2 ? 1 : 2; } }),
+        wsVar("YLD", "ec", () => w.yld, (x) => { w.yld = x; }, () => {
+          posNum(w.pri, 4, "Enter PRI first: it must be above 0");
+          return (w.yld = bondYield(w.pri));
+        }),
+        wsVar("PRI", "ec", () => w.pri, (x) => { posNum(x, 4, "PRI must be above 0"); w.pri = x; }, () => (w.pri = bondPrice(w.yld).pri)),
+        wsVar("AI", "a", () => bondPrice(w.yld).ai)
+      ];
+    },
+    clear: () => { bondW = { sdt: D_DEFAULT(), cpn: 0, rdt: D_DEFAULT(), rv: 100, act: bondW.act, m: bondW.m, yld: 0, pri: 0 }; }
+  },
+  mem: {
+    title: "MEM", key: "0",
+    items: () => MEM.map((_x, i) => wsVar("M" + i, "e", () => MEM[i], (x) => { MEM[i] = x; })),
+    clear: () => { MEM.fill(0); }
+  }
+};
+const WS_BY_KEY = {};
+Object.keys(WS).forEach((id) => { WS_BY_KEY[WS[id].key] = id; });
+
+const wsItems = () => (wsId && WS[wsId] ? WS[wsId].items() : []);
+const wsCur = () => {
+  if (currentMode !== "ws") return null;
+  const items = wsItems();
+  if (!items.length) return null;
+  if (wsPos >= items.length) wsPos = items.length - 1;
+  return items[wsPos];
+};
+
+const wsError = (e) => {
+  wsErr = true;
+  setScreen("Error " + (e && e.code ? e.code : 5));
+  setExpr(e && e.message ? e.message : "");
+};
+
+function wsDraw() {
+  const def = WS[wsId], it = wsCur();
+  setStatus(def.title, "");
+  if (!it) return;
+  if (wsBuf !== "") { setExpr((it.t === "se" ? it.text() : it.k) + " ="); setScreen(wsBuf); return; }
+  try {
+    if (it.t === "s") { setExpr("SETTING (2ND SET changes it)"); setScreen(it.text()); return; }
+    const val = it.get();
+    setExpr((it.t === "se" ? it.text() : it.k) + " =");
+    if (it.date) setScreen(dText(val) + (wsDow[wsId + it.k] ? "  " + dDow(val) : ""));
+    else setScreen(fmt(val));
+    if (it.t === "a") indComputed = true;
+  } catch (e) {
+    wsError(e);
+  }
+}
+
+const wsOpen = (id) => {
+  currentMode = "ws"; wsId = id; wsPos = 0; wsBuf = ""; wsErr = false;
+  cfPanel.hidden = true; regOverlay.hidden = true;
+  updateDisplay();
+};
+const wsLeave = () => {
+  currentMode = "standard"; wsBuf = ""; wsErr = false;
+  setScreen(fmt(currentNum())); setExpr("");
+  updateDisplay();
+};
+
+const wsStore = (it) => {
+  if (wsBuf === "") return;
+  const buf = wsBuf;
+  wsBuf = "";
+  try {
+    if (it.date) {
+      const d = dParse(buf);
+      if (!dInRange(d)) wsFail(6, "Dates run from 1980 to 2079");
+      it.set(d);
+      delete wsDow[wsId + it.k];
+    } else {
+      const x = /[0-9.)]([+\-*/]|\*\*)/.test(buf) ? evaluateChain(buf) : parseFloat(buf);
+      if (!Number.isFinite(x)) wsFail(5, "Not a number");
+      it.set(x);
+    }
+    updateDisplay();
+  } catch (e) {
+    wsError(e);
+  }
+};
+
+const wsKey = (val, action) => {
+  const def = WS[wsId];
+  const items = def.items();
+  const it = wsCur();
+  if (!it) return false;
+  if (wsErr) {
+    wsErr = false;
+    if (action === "clearAll" && !is2nd) { wsBuf = ""; updateDisplay(); return true; }
+  }
+  if (action === "2nd") { toggle2nd(); return true; }
+  if (is2nd) {
+    if (action === "enter") {                                  // SET
+      consume2nd();
+      if (it.next) { it.next(); wsBuf = ""; }
+      else if (it.k === "YR" && it.cpt) { it.cpt(); }
+      updateDisplay(); return true;
+    }
+    if (action === "clearAll") { consume2nd(); def.clear(); wsBuf = ""; if (wsPos >= def.items().length) wsPos = 0; updateDisplay(); return true; }
+    if (action === "cpt") { consume2nd(); wsLeave(); return true; }   // QUIT
+    if (action === "arrowUp" || action === "arrowDn") { consume2nd(); return true; }
+    return false;                                              // 2ND . and the rest: the calculator's own
+  }
+  const canEnter = it.t === "e" || it.t === "ec" || it.t === "se";
+  if (val !== undefined && /^[0-9.]$/.test(val)) {
+    if (!canEnter) return true;
+    if (val === "." && /\.\d*$/.test(wsBuf)) return true;
+    const fresh = wsBuf === "" || /[+\-*/]$/.test(wsBuf);
+    wsBuf = fresh && val === "." ? wsBuf + "0." : wsBuf + val;
+    updateDisplay(); return true;
+  }
+  if ((val !== undefined && /^[+\-*/]$/.test(val)) || action === "power") {
+    if (!canEnter || it.date) return true;
+    const op = action === "power" ? "**" : val;
+    if (wsBuf === "") wsBuf = String(it.get()) + op;
+    else if (/(\*\*|[+\-*/])$/.test(wsBuf)) wsBuf = wsBuf.replace(/(\*\*|[+\-*/])$/, op);
+    else wsBuf += op;
+    updateDisplay(); return true;
+  }
+  if (action === "plusMinus") {
+    if (!canEnter || it.date) return true;
+    if (wsBuf === "") { try { wsBuf = String(-it.get()); } catch (e) { wsBuf = ""; } }
+    else if (/^-?[\d.]+$/.test(wsBuf)) wsBuf = wsBuf.charAt(0) === "-" ? wsBuf.slice(1) : "-" + wsBuf;
+    else wsBuf = wsBuf.replace(/(\*\*|[+\-*/])(-?)([\d.]+)$/, (m0, op, sg, num) => op + (sg ? "" : "-") + num);
+    updateDisplay(); return true;
+  }
+  if (action === "backspace") { wsBuf = wsBuf.slice(0, -1); updateDisplay(); return true; }
+  if (action === "enter" || action === "assign" || action === "equals") {
+    if (canEnter) wsStore(it); else updateDisplay();
+    return true;
+  }
+  if (action === "arrowUp" || action === "arrowDn") {
+    wsBuf = "";
+    const step = action === "arrowDn" ? 1 : -1;
+    wsPos = def.move ? def.move(step, items.length) : (wsPos + step + items.length) % items.length;
+    updateDisplay(); return true;
+  }
+  if (action === "clearAll") { wsBuf = ""; updateDisplay(); return true; }
+  if (action === "cpt") {
+    if (!it.cpt) return true;
+    wsBuf = "";
+    try {
+      const out = it.cpt();
+      if (it.date) wsDow[wsId + it.k] = true;
+      const shown = it.date ? dText(out) : fmt(out);
+      if (!it.quiet) {
+        noteTape(def.title, def.note ? def.note(it, out) : "CPT " + it.k, it.date ? shown : shown);
+        indComputed = true; indEntered = false;
+      }
+      if (!it.date) { lastResult = out; }
+      updateDisplay();
+    } catch (e) {
+      wsError(e);
+    }
+    return true;
+  }
+  return false;                                                // anything else leaves the worksheet
+};
+
 let rstPending = false;
 const resetAll = () => {
   rstPending = false;
@@ -3511,12 +4208,14 @@ const resetAll = () => {
   amortP1 = 1; amortP2 = 1; amortActiveIndex = 0; amortInputBuffer = "";
   pyVal = 1; cyVal = 1; pyActiveIndex = 0; pyInputBuffer = "";
   iconvNom = 0; iconvEff = 0; iconvCy = 1; iconvPos = 0; iconvBuf = "";
+  wsResetAll();
+  invOn = false; hypOn = false; kArm = false; kConst = null; randSeed = null;
   decVal = 2; formatInputBuffer = ""; formatActiveIndex = 0;
   calcMode = "Chn"; angleMode = "DEG"; dateMode = "US";
   ["n", "iy", "pv", "pmt", "fv"].forEach((k) => { if (tvmInputs[k]) tvmInputs[k].value = ""; });
   if (tvmInputs.py) tvmInputs.py.value = fmt(1);
   if (tvmInputs.cy) tvmInputs.cy.value = fmt(1);
-  cfEntries = [{ cf: 0, freq: 1 }]; cfSub = "cf"; cfPos = 0; cfBuf = ""; cfNpv = null; cfIrr = null;
+  cfEntries = [{ cf: 0, freq: 1 }]; cfSub = "cf"; cfPos = 0; cfBuf = ""; cfNpv = cfNfv = null; cfIrr = null;
   const rate = document.getElementById("cfRate"); if (rate) rate.value = "";
   renderCFList();
   tvmPanel.hidden = true; cfPanel.hidden = true; regOverlay.hidden = true;
@@ -3552,8 +4251,31 @@ document.getElementById("keypad").addEventListener("click", (e) => {
     return;
   }
 
+  // INV and HYP last for one key: any key but INV and 2ND drops them
+  const inv = invOn, hyp = hypOn;
+  if (action !== "inv" && action !== "2nd") { invOn = false; hypOn = false; }
+  // K lasts while numbers and = are pressed
+  if (kConst && !(val !== undefined && /^[0-9.]$/.test(val)) && action !== "equals" && action !== "enter") kConst = null;
+
   // 2ND then 2 is ICONV, from anywhere
-  if (is2nd && val === "2") { consume2nd(); iconvOpen(); return; }
+  if (is2nd && val === "2") {
+    consume2nd();
+    if (currentMode === "cf") { currentMode = "standard"; cfBuf = ""; }
+    if (currentMode === "ws") { currentMode = "standard"; wsBuf = ""; }
+    iconvOpen(); return;
+  }
+  // 2ND then 1, 3 to 9 or 0 opens that worksheet, from anywhere
+  if (is2nd && val !== undefined && WS_BY_KEY[val]) {
+    consume2nd();
+    if (currentMode === "cf") { currentMode = "standard"; cfBuf = ""; }
+    if (currentMode === "iconv") { currentMode = "standard"; iconvBuf = ""; }
+    wsOpen(WS_BY_KEY[val]); return;
+  }
+  // a worksheet takes its keys first; anything else leaves it and is done as usual
+  if (currentMode === "ws") {
+    if (wsKey(val, action)) return;
+    wsLeave();
+  }
   // ICONV takes its keys first; anything else leaves it and is done as usual
   if (currentMode === "iconv") {
     if (iconvKey(val, action)) return;
@@ -3782,6 +4504,26 @@ document.getElementById("keypad").addEventListener("click", (e) => {
     }
   }
 
+  // ── 2ND on ×, ÷, − and +: x!, RAND, nPr, nCr ──────
+  if (val !== undefined && is2nd && /^[*/+\-]$/.test(val)) {
+    consume2nd();
+    if (val === "*") {
+      applyMath((x) => factorial(x), { kind: "x!", what: (x) => x + "!" });
+      setExpr("x!");
+    } else if (val === "/") {
+      const r = randNext();
+      const head = expression.replace(/-?\d*\.?\d+(e[+-]?\d+)?$/, "");
+      expression = (/[+\-*/PCR(]$/.test(head) ? head : "") + String(r);
+      lastResult = r;
+      setScreen(fmt(r)); setExpr("RAND");
+      if (window.__ccFresh) window.__ccFresh();
+    } else {
+      appendValue(val === "-" ? "P" : "C");
+      setExpr(val === "-" ? "nPr" : "nCr");
+    }
+    return;
+  }
+
   // ── Digit / operator tap in Standard Mode ─────────
   if (val !== undefined) {
     consume2nd();
@@ -3796,7 +4538,12 @@ document.getElementById("keypad").addEventListener("click", (e) => {
 
   // ── Memory: STO ─────────────────────────────────
   if (action === "sto") {
-    consume2nd();
+    if (consume2nd()) {
+      // ROUND: the number becomes what the display shows
+      applyMath((x) => (decVal === 9 ? x : Number(x.toFixed(decVal))), { kind: "ROUND", what: (x) => "ROUND " + x });
+      setExpr("ROUND");
+      return;
+    }
     openRegOverlay("sto");
     return;
   }
@@ -3814,6 +4561,18 @@ document.getElementById("keypad").addEventListener("click", (e) => {
     const target = btn.dataset.target;
 
     if (is2ndActive) {
+      if (target === "n") {
+        // xP/Y: the number shown times P/Y, ready for N
+        const x = shownNumber();
+        const out = x * pyVal;
+        expression = String(out);
+        lastResult = out;
+        setScreen(fmt(out));
+        setExpr("xP/Y (" + fmt(x) + " \u00d7 " + fmt(pyVal) + ")");
+        noteTape("xP/Y", fmt(x) + " \u00d7 P/Y " + fmt(pyVal), fmt(out));
+        if (window.__ccFresh) window.__ccFresh();
+        return;
+      }
       if (target === "pv") {
         // AMORT Worksheet
         currentMode = "amort";
@@ -4098,15 +4857,42 @@ document.getElementById("keypad").addEventListener("click", (e) => {
     return;
   }
 
-  // ── Parens ───────────────────────────────────────
-  if (action === "openParen")  { consume2nd(); appendValue("("); return; }
-  if (action === "closeParen") { consume2nd(); appendValue(")"); return; }
+  // ── Parens, and SIN and COS on them ──────────────
+  if (action === "openParen")  { if (consume2nd()) { trigKey("sin", inv, hyp); return; } appendValue("("); return; }
+  if (action === "closeParen") { if (consume2nd()) { trigKey("cos", inv, hyp); return; } appendValue(")"); return; }
 
   // ── Math functions ───────────────────────────────
   if (action === "percent") {
-    consume2nd();
-    applyMath((x) => x / 100, { kind: "%", what: (x) => x + " %" });
-    setExpr("÷ 100");
+    if (consume2nd()) {
+      // K: the last operation and its number repeat on each number then =
+      kArm = true; kConst = null;
+      setExpr("K: = keeps this operation as a constant");
+      return;
+    }
+    /* % works on the number being entered: after + or − it is that percent of
+       the number before (498 + 7 % shows 34.86, = gives 532.86); otherwise it
+       is the number divided by 100 (453 × 4 % = gives 18.12) */
+    const pm = /^(.*[0-9.)])([+\-])(\d*\.?\d+(?:e[+-]?\d+)?)$/.exec(expression);
+    try {
+      if (pm) {
+        const base = calcMode === "Chn" ? evaluateChain(pm[1]) : evalAOS(pm[1]);
+        const c = base * parseFloat(pm[3]) / 100;
+        if (!Number.isFinite(c)) throw new Error("Bad expression");
+        expression = pm[1] + pm[2] + String(c);
+        setScreen(fmt(c));
+        noteTape("%", pm[3] + "% of " + fmt(base), fmt(c));
+      } else {
+        const em = /(-?\d*\.?\d+(?:e[+-]?\d+)?)$/.exec(expression);
+        if (!em) throw new Error("Bad expression");
+        let head = expression.slice(0, em.index), num = em[1];
+        if (num.charAt(0) === "-" && head !== "" && !/[+\-*/PCR(]$/.test(head)) { head += "-"; num = num.slice(1); }
+        const c = parseFloat(num) / 100;
+        expression = head + String(c);
+        setScreen(fmt(c));
+        noteTape("%", num + " %", fmt(c));
+      }
+      setExpr("%");
+    } catch (e) { showError(e.message || "Bad expression"); }
     return;
   }
 
@@ -4138,7 +4924,7 @@ document.getElementById("keypad").addEventListener("click", (e) => {
   }
 
   if (action === "ln") {
-    if (consume2nd()) {
+    if (consume2nd() || inv) {
       // eˣ
       applyMath((x) => Math.exp(x), { kind: "eˣ", what: (x) => "e^" + x });
       setExpr("eˣ");
@@ -4153,15 +4939,22 @@ document.getElementById("keypad").addEventListener("click", (e) => {
   }
 
   if (action === "inv") {
-    consume2nd();
-    applyMath((x) => 1 / x, { kind: "1/x", what: (x) => "1 / " + x });
-    setExpr("INV");
+    // INV: the next key does its inverse; 2ND INV is HYP
+    if (consume2nd()) hypOn = !hyp;
+    else { invOn = !inv; hypOn = hyp; }
+    setExpr((hypOn ? "HYP " : "") + (invOn ? "INV" : ""));
     return;
   }
 
   if (action === "power") {
+    if (consume2nd()) { trigKey("tan", inv, hyp); return; }
+    if (inv) {
+      // INV yˣ: y to the power 1/x, so 8 INV yˣ 3 = gives 2
+      appendValue("R");
+      setExpr("INV y\u02e3: root");
+      return;
+    }
     // Enters y^x mode: append ** operator so user types exponent
-    consume2nd();
     if (!expression.endsWith("**")) {
       expression += "**";
     }
@@ -4192,6 +4985,17 @@ window.addEventListener("keydown", (e) => {
     if (/^[0-9.]$/.test(e.key)) { e.preventDefault(); iconvKey(e.key, undefined); return; }
     if (e.key === "-" && iconvBuf === "") { e.preventDefault(); iconvKey(undefined, "plusMinus"); return; }
     if (imap[e.key]) { e.preventDefault(); iconvKey(undefined, imap[e.key]); return; }
+  }
+
+  // The other worksheets from the keyboard: the same as their keys
+  if (currentMode === "ws") {
+    const wmap = { Enter: "enter", "=": "equals", ArrowUp: "arrowUp", ArrowDown: "arrowDn",
+                   Backspace: "backspace", Escape: "clearAll" };
+    if (/^[0-9.]$/.test(e.key)) { e.preventDefault(); wsKey(e.key, undefined); return; }
+    if (e.key === "-" && wsBuf === "") { e.preventDefault(); wsKey(undefined, "plusMinus"); return; }
+    if (/^[+\-*/]$/.test(e.key)) { e.preventDefault(); wsKey(e.key, undefined); return; }
+    if (wmap[e.key]) { e.preventDefault(); wsKey(undefined, wmap[e.key]); return; }
+    return;
   }
 
   // The cash flow worksheet from the keyboard: the same as its keys
@@ -4410,6 +5214,8 @@ window.addEventListener("keydown", (e) => {
   }
 
   // Standard Mode Keyboard support
+  if (kConst && !/^[0-9.]$/.test(e.key) && e.key !== "Enter" && e.key !== "=" &&
+      !["Shift", "Control", "Alt", "Meta"].includes(e.key)) kConst = null;
   if (/^[0-9]$/.test(e.key) || ["+", "-", "/", ".", "(", ")"].includes(e.key)) {
     appendValue(e.key);
     return;
@@ -4473,13 +5279,12 @@ document.addEventListener("DOMContentLoaded", () => {
  * with ENTER; SET on a setting 2ND SET changes; the arrows in a worksheet; DEL
  * and INS on a cash flow; END or BGN for TVM payments; RAD for radians; the
  * entered mark after a value is kept, and the computed mark after one is
- * worked out. INV and HYP stay dark: this calculator has no inverse or
- * hyperbolic mode.
+ * worked out. INV and HYP while they are on, for the next key.
  */
 const IND_KEYS = [
   ["2ND", "Second function: the next key does what is written above it"],
-  ["INV", "Inverse functions (not used on this calculator)"],
-  ["HYP", "Hyperbolic functions (not used on this calculator)"],
+  ["INV", "INV is on: the next key does its inverse (INV LN is e\u02e3, INV y\u02e3 a root, INV SIN the angle)"],
+  ["HYP", "HYP is on: the next SIN, COS or TAN is hyperbolic"],
   ["COMPUTE", "Press CPT to work out the value shown"],
   ["ENTER", "Press ENTER to keep the value you typed"],
   ["SET", "Press 2ND SET to change this setting"],
@@ -4496,22 +5301,30 @@ const indEl = document.getElementById("lcdInd");
 let indLast = "";
 const renderInd = () => {
   if (!indEl) return;
-  const ws = ["cf", "py", "amort", "format", "bgn", "iconv"].indexOf(currentMode) >= 0;
+  const ws = ["cf", "py", "amort", "format", "bgn", "iconv", "ws"].indexOf(currentMode) >= 0;
   const cfRows = currentMode === "cf" && cfSub === "cf";
+  let wi = null;
+  try { wi = wsCur(); } catch (e) { wi = null; }
+  const wt = wi ? wi.t : "";
   const on = {
     "2ND": is2nd,
-    "COMPUTE": isCpt || (currentMode === "cf" && (cfSub === "irr" || (cfSub === "npv" && cfPos === 1))) ||
-               (currentMode === "amort" && amortActiveIndex >= 2) || (currentMode === "iconv" && iconvPos < 2),
+    "INV": invOn,
+    "HYP": hypOn,
+    "COMPUTE": isCpt || (currentMode === "cf" && (cfSub === "irr" || (cfSub === "npv" && (cfPos === 1 || cfPos === 2)))) ||
+               (currentMode === "amort" && amortActiveIndex >= 2) || (currentMode === "iconv" && iconvPos < 2) ||
+               wt === "ec",
     "ENTER": currentMode === "iconv" || cfRows || (currentMode === "cf" && cfSub === "npv" && cfPos === 0) || currentMode === "py" ||
-             (currentMode === "amort" && amortActiveIndex < 2) || (currentMode === "format" && formatActiveIndex === 0),
-    "SET": currentMode === "bgn" || (currentMode === "format" && formatActiveIndex > 0),
+             (currentMode === "amort" && amortActiveIndex < 2) || (currentMode === "format" && formatActiveIndex === 0) ||
+             wt === "e" || wt === "ec" || wt === "se",
+    "SET": currentMode === "bgn" || (currentMode === "format" && formatActiveIndex > 0) || wt === "s" || wt === "se",
     "\u2191": ws && currentMode !== "bgn" && !(cfRows && cfPos === 0),
     "\u2193": ws && currentMode !== "bgn",
     "DEL": cfRows, "INS": cfRows,
     "END": true,
     "RAD": angleMode === "RAD",
     "\u25c1": indEntered,
-    "\u2731": indComputed || (currentMode === "amort" && amortActiveIndex >= 2)
+    "\u2731": indComputed || (currentMode === "amort" && amortActiveIndex >= 2) || wt === "a" ||
+              (currentMode === "cf" && cfSub === "npv" && cfPos >= 3)
   };
   const html = IND_KEYS.map((k) => {
     const label = k[0] === "END" ? (isBgn ? "BGN" : "END") : k[0];
@@ -4618,7 +5431,7 @@ renderInd();
     while (i > 0 && /[\d.]/.test(expression[i - 1])) i--;
     const head = expression.slice(0, i);
 
-    if (head && head !== "-" && /[+\-*/]$/.test(head)) {
+    if (head && head !== "-" && /[+\-*/PCR]$/.test(head)) {
       // Something is still pending, so keep it and zero just the entry:
       // "12+5" -> "12+0", "2+3*4" -> "2+3*0".
       expression = head + "0";
@@ -4874,6 +5687,9 @@ renderInd();
   /* True once an operation has finished: the next digit starts a new entry
      instead of extending the value on screen. */
   let fresh = false;
+  /* the engine calls this after a key that leaves a finished number, such as
+     x!, SIN, RAND, ROUND or xP/Y */
+  window.__ccFresh = () => { fresh = true; };
 
   /* Re-render, then label the status bar. Order matters -- updateDisplay() ends
      with setStatus(indicators, "FINANCIAL"), so anything written first is lost. */
@@ -4993,6 +5809,7 @@ renderInd();
 
   /* A digit completes whichever of STO / RCL is waiting. */
   const completeWithDigit = (d) => {
+    consume2nd();
     if (pending === "sto") store(d);
     else recallRegister(d);
   };
@@ -5006,6 +5823,26 @@ renderInd();
       const { action, value: val } = btn.dataset;
 
       if (pending) {
+        /* STO 2ND RAND stores the number shown as the seed of the random
+           numbers, so the same series comes again */
+        if (pending === "sto" && action === "2nd") {
+          e.stopPropagation();
+          e.preventDefault();
+          toggle2nd();
+          return;
+        }
+        if (pending === "sto" && is2nd && val === "/") {
+          e.stopPropagation();
+          e.preventDefault();
+          consume2nd();
+          const seed = displayedNumber();
+          setRandSeed(seed);
+          pending = null;
+          closePanel();
+          setExpr("Random seed stored: " + fmt(seed));
+          fresh = true;
+          return;
+        }
         if (val !== undefined && DIGIT.test(val)) {
           e.stopPropagation();
           e.preventDefault();
@@ -5059,6 +5896,7 @@ renderInd();
          worksheet these keys mean nothing and the engine keeps its behaviour. */
       if (currentMode !== "standard") return;
       if (action !== "sto" && action !== "rcl") return;
+      if (is2nd && action === "sto") { fresh = true; return; }   // 2ND STO is ROUND: the engine's
 
       e.stopPropagation();
       e.preventDefault();
