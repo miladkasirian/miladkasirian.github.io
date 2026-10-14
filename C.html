@@ -984,6 +984,15 @@ body.fitted .calculator {
   position: relative;
 }
 
+.lcd-ind {
+  display: flex; flex-wrap: wrap; gap: 2px 7px;
+  font-size: 9px; font-weight: 700; letter-spacing: .04em;
+  min-height: 12px; margin-bottom: 2px; user-select: none;
+}
+.lcd-ind span { color: rgba(19, 35, 11, .16); cursor: default; }
+.lcd-ind span.on { color: #13230b; }
+.lcd-ind span.bgn.on { outline: 1px solid rgba(19, 35, 11, .55); border-radius: 2px; padding: 0 2px; }
+
 .display-status {
   display: flex;
   justify-content: space-between;
@@ -2249,6 +2258,7 @@ body.fitted .calculator {
 
                 <!-- ── LCD DISPLAY ── -->
                 <div class="display" id="display">
+                    <div class="lcd-ind" id="lcdInd"></div>
                     <div class="display-status">
                         <span id="statusLeft"></span>
                         <span id="statusRight"></span>
@@ -2571,6 +2581,8 @@ const setScreen = (val) => { screenEl.textContent = val; };
  * calculator away keeps it and closing the calculator loses it.
  */
 const TAPE = [];
+/* the LCD's entered and computed marks, set by the keys and the worksheets */
+let indEntered = false, indComputed = false;
 const tapeListEl  = document.getElementById("tapeList");
 const tapeEmptyEl = document.getElementById("tapeEmpty");
 
@@ -2590,6 +2602,7 @@ const noteTape = (kind, what, value) => {
     what: String(what || "").replace(/[<>&]/g, " ").slice(0, 60),
     value: String(value)
   };
+  if (["TVM", "NPV", "IRR", "ICONV"].indexOf(line.kind) >= 0) { indComputed = true; indEntered = false; }
   const last = TAPE[TAPE.length - 1];
   /* pressing equals twice on the same thing is one result, not two */
   if (last && last.kind === line.kind && last.what === line.what &&
@@ -2608,16 +2621,10 @@ if (document.getElementById("tapeClear")) {
 drawTape();
 const setExpr   = (val) => { exprEl.textContent = val; };
 const setStatus = (left = "", right = "") => {
-  let parts = left.split(" ").filter(p => p !== "");
-  if (isBgn && !parts.includes("BGN")) {
-    parts.unshift("BGN");
-  }
+  /* 2ND and BGN are shown on the indicator row above, so not here as well */
+  let parts = left.split(" ").filter(p => p !== "" && p !== "2ND" && p !== "BGN");
   if (calcMode === "AOS" && !parts.includes("AOS")) {
     parts.unshift("AOS");
-  }
-  if (is2nd && !parts.includes("2ND")) {
-    // Keep 2ND at the very front
-    parts.unshift("2ND");
   }
   statusLeft.textContent  = parts.join(" ");
   statusRight.textContent = right;
@@ -2932,9 +2939,7 @@ const calculateAmort = () => {
 };
 
 const updateDisplay = () => {
-  let sLeftParts = [];
-  if (is2nd) sLeftParts.push("2ND");
-  if (isBgn) sLeftParts.push("BGN");
+  let sLeftParts = [];               /* 2ND and BGN are on the indicator row above */
   if (calcMode === "AOS") sLeftParts.push("AOS");
 
   // Keep worksheet P/Y and C/Y inputs in sync
@@ -2964,6 +2969,8 @@ const updateDisplay = () => {
     setStatus(sLeftParts.join(" "), "");
     setExpr("SETTING");
     setScreen(isBgn ? "BGN" : "END");
+  } else if (currentMode === "iconv") {
+    iconvDraw();
   } else if (currentMode === "py") {
     setStatus(sLeftParts.join(" "), "");
     const varName = pyActiveIndex === 0 ? "P/Y" : "C/Y";
@@ -3409,6 +3416,91 @@ const applyMath = (fn, label) => {
  * BGN, the format settings, and the list of what has been worked out. The red
  * Reset button beside that list does the same in one press.
  */
+/* ── ICONV: the interest conversion worksheet (2ND then 2) ──
+ * As on a BA II Plus: NOM, EFF and C/Y, scrolled with the arrows. Type a value
+ * and press ENTER to keep it; on NOM or EFF, CPT works it out from the other
+ * two. 2ND CLR WORK empties NOM and EFF and leaves C/Y; 2ND QUIT leaves.
+ * Its C/Y is its own, separate from the TVM one, as on the real calculator.
+ */
+let iconvNom = 0, iconvEff = 0, iconvCy = 1, iconvPos = 0, iconvBuf = "";
+const ICONV_NAMES = ["NOM", "EFF", "C/Y"];
+const iconvVal = (i) => [iconvNom, iconvEff, iconvCy][i];
+const iconvDraw = () => {
+  setStatus("ICONV", "");
+  setExpr(ICONV_NAMES[iconvPos] + " =");
+  setScreen(iconvBuf !== "" ? iconvBuf : fmt(iconvVal(iconvPos)));
+};
+const iconvOpen = () => {
+  currentMode = "iconv"; iconvPos = 0; iconvBuf = "";
+  cfPanel.hidden = true;
+  updateDisplay();
+};
+const iconvLeave = () => {
+  currentMode = "standard"; iconvBuf = "";
+  setScreen(fmt(currentNum())); setExpr("");
+  updateDisplay();
+};
+const iconvKey = (val, action) => {
+  if (action === "2nd") { toggle2nd(); return true; }
+  if (val !== undefined && /^[0-9.]$/.test(val)) {
+    consume2nd();
+    if (val === "." && iconvBuf.indexOf(".") >= 0) return true;
+    iconvBuf = (iconvBuf === "" && val === ".") ? "0." : iconvBuf + val;
+    updateDisplay(); return true;
+  }
+  if (action === "plusMinus") {
+    consume2nd();
+    if (iconvBuf !== "") iconvBuf = iconvBuf.charAt(0) === "-" ? iconvBuf.slice(1) : "-" + iconvBuf;
+    else if (iconvPos < 2) iconvBuf = String(-iconvVal(iconvPos));
+    updateDisplay(); return true;
+  }
+  if (action === "backspace") {
+    consume2nd();
+    if (iconvBuf !== "") iconvBuf = iconvBuf.slice(0, -1);
+    updateDisplay(); return true;
+  }
+  if (action === "enter" || action === "assign" || action === "equals") {
+    consume2nd();
+    if (iconvBuf !== "") {
+      const v = parseFloat(iconvBuf.replace(/,/g, ""));
+      if (Number.isFinite(v)) {
+        if (iconvPos === 0) iconvNom = v;
+        else if (iconvPos === 1) iconvEff = v;
+        else if (v > 0) iconvCy = v;
+        else { iconvBuf = ""; showError("C/Y must be above 0"); return true; }
+      }
+      iconvBuf = "";
+    }
+    updateDisplay(); return true;
+  }
+  if (action === "arrowUp" || action === "arrowDn") {
+    consume2nd();
+    iconvPos = (iconvPos + (action === "arrowDn" ? 1 : 2)) % 3;
+    iconvBuf = "";
+    updateDisplay(); return true;
+  }
+  if (action === "clearAll") {
+    if (consume2nd()) { iconvNom = 0; iconvEff = 0; }       // CLR WORK keeps C/Y
+    iconvBuf = "";
+    updateDisplay(); return true;
+  }
+  if (action === "cpt") {
+    if (consume2nd()) { iconvLeave(); return true; }         // QUIT
+    if (iconvPos === 2) return true;                         // C/Y is entered, not worked out
+    const m = iconvCy;
+    if (iconvPos === 1) {
+      iconvEff = 100 * (Math.pow(1 + iconvNom / (100 * m), m) - 1);
+      noteTape("ICONV", "NOM " + fmt(iconvNom) + "%, C/Y " + fmt(m) + " to EFF", fmt(iconvEff) + "%");
+    } else {
+      iconvNom = 100 * m * (Math.pow(1 + iconvEff / 100, 1 / m) - 1);
+      noteTape("ICONV", "EFF " + fmt(iconvEff) + "%, C/Y " + fmt(m) + " to NOM", fmt(iconvNom) + "%");
+    }
+    iconvBuf = "";
+    updateDisplay(); return true;
+  }
+  return false;                                              // anything else leaves the worksheet
+};
+
 let rstPending = false;
 const resetAll = () => {
   rstPending = false;
@@ -3418,6 +3510,7 @@ const resetAll = () => {
   currentMode = "standard";
   amortP1 = 1; amortP2 = 1; amortActiveIndex = 0; amortInputBuffer = "";
   pyVal = 1; cyVal = 1; pyActiveIndex = 0; pyInputBuffer = "";
+  iconvNom = 0; iconvEff = 0; iconvCy = 1; iconvPos = 0; iconvBuf = "";
   decVal = 2; formatInputBuffer = ""; formatActiveIndex = 0;
   calcMode = "Chn"; angleMode = "DEG"; dateMode = "US";
   ["n", "iy", "pv", "pmt", "fv"].forEach((k) => { if (tvmInputs[k]) tvmInputs[k].value = ""; });
@@ -3457,6 +3550,14 @@ document.getElementById("keypad").addEventListener("click", (e) => {
     setExpr("ENTER resets everything. Any other key leaves it.");
     setStatus("", "RESET");
     return;
+  }
+
+  // 2ND then 2 is ICONV, from anywhere
+  if (is2nd && val === "2") { consume2nd(); iconvOpen(); return; }
+  // ICONV takes its keys first; anything else leaves it and is done as usual
+  if (currentMode === "iconv") {
+    if (iconvKey(val, action)) return;
+    iconvLeave();
   }
 
   // The cash flow worksheet takes its keys first; anything it does not use
@@ -4084,6 +4185,15 @@ window.addEventListener("keydown", (e) => {
     return;
   }
 
+  // ICONV from the keyboard: the same as its keys
+  if (currentMode === "iconv") {
+    const imap = { Enter: "enter", "=": "equals", ArrowUp: "arrowUp", ArrowDown: "arrowDn",
+                   Backspace: "backspace", Escape: "clearAll" };
+    if (/^[0-9.]$/.test(e.key)) { e.preventDefault(); iconvKey(e.key, undefined); return; }
+    if (e.key === "-" && iconvBuf === "") { e.preventDefault(); iconvKey(undefined, "plusMinus"); return; }
+    if (imap[e.key]) { e.preventDefault(); iconvKey(undefined, imap[e.key]); return; }
+  }
+
   // The cash flow worksheet from the keyboard: the same as its keys
   if (currentMode === "cf") {
     const map = { Enter: ["enter"], "=": ["equals"], ArrowUp: ["arrowUp"], ArrowDown: ["arrowDn"],
@@ -4357,6 +4467,78 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
+/* ── The indicators along the top of the LCD ─────────────
+ * As on a BA II Plus: each one is lit while it applies. 2ND after 2ND is
+ * pressed; COMPUTE on a value CPT works out; ENTER where a typed value is kept
+ * with ENTER; SET on a setting 2ND SET changes; the arrows in a worksheet; DEL
+ * and INS on a cash flow; END or BGN for TVM payments; RAD for radians; the
+ * entered mark after a value is kept, and the computed mark after one is
+ * worked out. INV and HYP stay dark: this calculator has no inverse or
+ * hyperbolic mode.
+ */
+const IND_KEYS = [
+  ["2ND", "Second function: the next key does what is written above it"],
+  ["INV", "Inverse functions (not used on this calculator)"],
+  ["HYP", "Hyperbolic functions (not used on this calculator)"],
+  ["COMPUTE", "Press CPT to work out the value shown"],
+  ["ENTER", "Press ENTER to keep the value you typed"],
+  ["SET", "Press 2ND SET to change this setting"],
+  ["\u2191", "Press the up arrow for the previous item"],
+  ["\u2193", "Press the down arrow for the next item"],
+  ["DEL", "Press 2ND DEL to delete this cash flow"],
+  ["INS", "Press 2ND INS to insert a cash flow here"],
+  ["END", "TVM payments at the end of each period (BGN: at the beginning)"],
+  ["RAD", "Angles in radians"],
+  ["\u25c1", "The value shown was entered"],
+  ["\u2731", "The value shown was computed"]
+];
+const indEl = document.getElementById("lcdInd");
+let indLast = "";
+const renderInd = () => {
+  if (!indEl) return;
+  const ws = ["cf", "py", "amort", "format", "bgn", "iconv"].indexOf(currentMode) >= 0;
+  const cfRows = currentMode === "cf" && cfSub === "cf";
+  const on = {
+    "2ND": is2nd,
+    "COMPUTE": isCpt || (currentMode === "cf" && (cfSub === "irr" || (cfSub === "npv" && cfPos === 1))) ||
+               (currentMode === "amort" && amortActiveIndex >= 2) || (currentMode === "iconv" && iconvPos < 2),
+    "ENTER": currentMode === "iconv" || cfRows || (currentMode === "cf" && cfSub === "npv" && cfPos === 0) || currentMode === "py" ||
+             (currentMode === "amort" && amortActiveIndex < 2) || (currentMode === "format" && formatActiveIndex === 0),
+    "SET": currentMode === "bgn" || (currentMode === "format" && formatActiveIndex > 0),
+    "\u2191": ws && currentMode !== "bgn" && !(cfRows && cfPos === 0),
+    "\u2193": ws && currentMode !== "bgn",
+    "DEL": cfRows, "INS": cfRows,
+    "END": true,
+    "RAD": angleMode === "RAD",
+    "\u25c1": indEntered,
+    "\u2731": indComputed || (currentMode === "amort" && amortActiveIndex >= 2)
+  };
+  const html = IND_KEYS.map((k) => {
+    const label = k[0] === "END" ? (isBgn ? "BGN" : "END") : k[0];
+    return '<span class="' + (on[k[0]] ? "on" : "") + (k[0] === "END" ? " bgn" : "") + '" title="' + k[1] + '">' + label + "</span>";
+  }).join("");
+  if (html !== indLast) { indEl.innerHTML = html; indLast = html; }
+};
+/* what a key does to the entered and computed marks, decided before the key
+   itself runs (capture), from the state it finds */
+document.getElementById("keypad").addEventListener("click", (e) => {
+  const btn = e.target.closest("button.key");
+  if (!btn) return;
+  const a = btn.dataset.action, v = btn.dataset.value;
+  if (v !== undefined) { indEntered = false; indComputed = false; return; }
+  if (is2nd) { if (a !== "2nd") { indEntered = false; indComputed = false; } return; }
+  if ((a === "enter" || a === "assign") && currentMode !== "standard") { indEntered = true; indComputed = false; return; }
+  if ((a === "tvm" || a === "clrTVM") && !isCpt) { indEntered = true; indComputed = false; return; }
+  if (["cf", "npv", "irr", "arrowUp", "arrowDn", "clearAll", "plusMinus", "backspace"].indexOf(a) >= 0) {
+    indEntered = false; indComputed = false;
+  }
+}, true);
+/* straight after every key (the page listens after the keypad has acted), and
+   on a timer for anything that changes on its own */
+document.addEventListener("click", () => { renderInd(); });
+window.addEventListener("keyup", () => { renderInd(); });
+setInterval(renderInd, 150);
+renderInd();
 
 </script>
 
